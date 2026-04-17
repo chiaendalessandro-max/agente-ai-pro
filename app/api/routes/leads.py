@@ -46,7 +46,13 @@ async def search_global_endpoint(
     if hit is not None:
         return hit
 
-    results = await search_global(payload.query, payload.country, payload.sector, payload.limit)
+    try:
+        results = await search_global(payload.query, payload.country, payload.sector, payload.limit)
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Search provider temporarily unavailable. Retry in a few seconds.",
+        )
     saved = 0
     for item in results:
         existing_company_q = await db.execute(select(Company).where(Company.domain == item["domain"]))
