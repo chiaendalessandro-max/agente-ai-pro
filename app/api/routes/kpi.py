@@ -6,6 +6,7 @@ from app.api.deps import apply_rate_limit, get_current_user
 from app.core.database import get_db
 from app.models.email_queue import EmailQueue
 from app.models.followup import Followup
+from app.models.company import Company
 from app.models.lead import Lead
 from app.models.user import User
 from app.schemas.kpi import KpiOut
@@ -24,6 +25,29 @@ async def get_kpi(user: User = Depends(get_current_user), db: AsyncSession = Dep
     followups = await db.scalar(
         select(func.count(Followup.id)).join(Lead, Followup.lead_id == Lead.id).where(Lead.user_id == user.id, Followup.status == "scheduled")
     )
+    top_result = await db.execute(
+        select(Lead, Company)
+        .join(Company, Lead.company_id == Company.id)
+        .where(Lead.user_id == user.id)
+        .order_by(Lead.score.desc(), Lead.id.desc())
+        .limit(5)
+    )
+    top_leads = top_result.all()
+    suggestions = [
+        {
+            "lead_id": l.id,
+            "company_name": c.name,
+            "score": l.score,
+            "classification": l.classification,
+            "hint": "Contattare entro 24h" if l.score >= 70 else ("Warm nurturing" if l.score >= 40 else "Monitorare"),
+        }
+        for l, c in top_leads
+    ]
+    recent_activity = [
+        {"type": "lead_saved", "value": int(total or 0)},
+        {"type": "email_queue", "value": int(emails or 0)},
+        {"type": "followups", "value": int(followups or 0)},
+    ]
     return KpiOut(
         total_leads=total or 0,
         high_value=high or 0,
@@ -31,4 +55,6 @@ async def get_kpi(user: User = Depends(get_current_user), db: AsyncSession = Dep
         low_value=low or 0,
         queued_emails=emails or 0,
         scheduled_followups=followups or 0,
+        suggestions=suggestions,
+        recent_activity=recent_activity,
     )

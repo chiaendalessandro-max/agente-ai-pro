@@ -20,6 +20,21 @@ router = APIRouter(dependencies=[Depends(apply_rate_limit)])
 cache = TTLCache(ttl_seconds=180, max_items=300)
 
 
+def _temperature_from_lead(lead: Lead) -> str:
+    note = (lead.notes or "").strip().upper()
+    if note.startswith("TEMP:HOT"):
+        return "HOT"
+    if note.startswith("TEMP:COLD"):
+        return "COLD"
+    if note.startswith("TEMP:WARM"):
+        return "WARM"
+    if lead.score >= 70:
+        return "HOT"
+    if lead.score >= 40:
+        return "WARM"
+    return "COLD"
+
+
 @router.post("/search-global")
 async def search_global_endpoint(
     payload: SearchGlobalIn,
@@ -120,6 +135,7 @@ async def list_leads(
             website=c.website,
             score=l.score,
             classification=l.classification,
+            temperature=_temperature_from_lead(l),
             sector=c.sector,
             country=c.country,
             contact_email=l.contact_email,
@@ -127,3 +143,51 @@ async def list_leads(
         )
         for l, c in rows
     ]
+
+
+@router.get("/leads/{lead_id}")
+async def lead_detail(lead_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    result = await db.execute(
+        select(Lead, Company)
+        .join(Company, Lead.company_id == Company.id)
+        .where(Lead.id == lead_id, Lead.user_id == user.id)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    l, c = row
+    return {
+        "id": l.id,
+        "company_name": c.name,
+        "website": c.website,
+        "country": c.country,
+        "sector": c.sector,
+        "size_estimate": c.size_estimate,
+        "description": c.description,
+        "value_signals": c.value_signals,
+        "score": l.score,
+        "classification": l.classification,
+        "temperature": _temperature_from_lead(l),
+        "contact_email": l.contact_email,
+        "contact_phone": l.contact_phone,
+        "contact_page": l.contact_page,
+    }
+
+
+@router.patch("/leads/{lead_id}/temperature")
+async def set_lead_temperature(
+    lead_id: int,
+    payload: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    value = str(payload.get("temperature", "")).upper()
+    if value not in {"HOT", "WARM", "COLD"}:
+        raise HTTPException(status_code=400, detail="temperature must be HOT/WARM/COLD")
+    result = await db.execute(select(Lead).where(Lead.id == lead_id, Lead.user_id == user.id))
+    lead = result.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead.notes = f"TEMP:{value}"
+    await db.commit()
+    return {"ok": True, "temperature": value}

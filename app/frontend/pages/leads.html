@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lead salvati - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body id="app"></body>
+<script>
+  if (!requireAuth()) {}
+  const content = `
+    <div class="card overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-800"><tr>
+          <th class="text-left p-3">Azienda</th><th class="text-left p-3">Paese</th><th class="text-left p-3">Score</th><th class="text-left p-3">Stato</th><th class="text-left p-3">Contatto</th><th class="text-left p-3">Azioni</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>`;
+  document.getElementById('app').innerHTML = appLayout('leads', content);
+
+  async function load() {
+    const leads = await api('/leads?page=1&page_size=100');
+    document.getElementById('rows').innerHTML = (leads||[]).map(l => `
+      <tr class="border-t border-slate-800">
+        <td class="p-3">${l.company_name}</td>
+        <td class="p-3">${l.country}</td>
+        <td class="p-3">${l.score}</td>
+        <td class="p-3"><span class="px-2 py-1 rounded text-xs ${temperatureBadge(l.temperature)}">${l.temperature}</span></td>
+        <td class="p-3">${l.contact_email || "-"}<br>${l.contact_phone || ""}</td>
+        <td class="p-3">
+          <div class="flex gap-2">
+            <a href="/app/company?id=${l.id}" class="btn btn-ghost text-xs">Dettaglio</a>
+            <button class="btn btn-ghost text-xs" onclick="setTemp(${l.id},'HOT')">HOT</button>
+            <button class="btn btn-ghost text-xs" onclick="setTemp(${l.id},'WARM')">WARM</button>
+            <button class="btn btn-ghost text-xs" onclick="setTemp(${l.id},'COLD')">COLD</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  async function setTemp(id, t) {
+    try {
+      await api(`/leads/${id}/temperature`, { method: 'PATCH', body: JSON.stringify({ temperature: t }) });
+      await load();
+    } catch (e) { alert(e.message); }
+  }
+  window.setTemp = setTemp;
+  load();
+</script>
+</html>

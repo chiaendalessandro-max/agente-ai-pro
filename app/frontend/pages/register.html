@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registrazione - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body class="page-shell">
+  <div class="min-h-screen flex items-center justify-center p-6">
+    <div class="w-full max-w-md card p-6">
+      <h2 class="text-2xl font-bold mb-1">Crea account</h2>
+      <p class="text-slate-400 text-sm mb-5">Inizia a trovare clienti ad alto valore</p>
+      <form id="regForm" class="space-y-4">
+        <div>
+          <label class="text-sm">Nome azienda</label>
+          <input id="company" class="input mt-1" required />
+        </div>
+        <div>
+          <label class="text-sm">Email</label>
+          <input id="email" type="email" class="input mt-1" required />
+        </div>
+        <div>
+          <label class="text-sm">Password</label>
+          <input id="password" type="password" class="input mt-1" minlength="8" required />
+        </div>
+        <button class="btn btn-primary w-full">Registrati</button>
+      </form>
+      <p class="text-sm text-slate-400 mt-4">Hai già un account? <a href="/app/login" class="text-blue-400">Login</a></p>
+      <p id="err" class="text-sm text-red-300 mt-3"></p>
+      <p id="ok" class="text-sm text-emerald-300 mt-3"></p>
+    </div>
+  </div>
+  <script>
+    document.getElementById('regForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      document.getElementById('err').textContent = '';
+      document.getElementById('ok').textContent = '';
+      try {
+        await api('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            company_name: document.getElementById('company').value,
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+          })
+        });
+        document.getElementById('ok').textContent = 'Registrazione completata. Vai al login.';
+      } catch (err) {
+        document.getElementById('err').textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

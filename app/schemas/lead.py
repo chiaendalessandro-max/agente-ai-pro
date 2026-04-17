@@ -28,6 +28,7 @@ class LeadItemOut(BaseModel):
     website: str
     score: int
     classification: str
+    temperature: str
     sector: str
     country: str
     contact_email: str

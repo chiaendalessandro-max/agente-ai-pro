@@ -1,0 +1,11 @@
+body { font-family: Inter, system-ui, Arial, sans-serif; }
+.page-shell { min-height: 100vh; background: radial-gradient(circle at 20% 0%, #0b1c3f, #030712 45%); color: #e5e7eb; }
+.card { background: rgba(15,23,42,.85); border: 1px solid #1f2937; border-radius: 14px; }
+.input { width: 100%; background: #020617; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; color: #e2e8f0; }
+.btn { border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-ghost { border: 1px solid #334155; color: #e2e8f0; }
+.badge-hot { background: #14532d; color: #86efac; }
+.badge-warm { background: #78350f; color: #fcd34d; }
+.badge-cold { background: #1e293b; color: #cbd5e1; }

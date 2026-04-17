@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body id="app"></body>
+<script>
+  if (!requireAuth()) {}
+  (async function(){
+    try {
+      const kpi = await api('/kpi');
+      const html = `
+        <div class="grid md:grid-cols-3 gap-4 mb-6">
+          <div class="card p-4"><div class="text-xs text-slate-400">Lead Totali</div><div class="text-3xl font-bold">${kpi.total_leads}</div></div>
+          <div class="card p-4"><div class="text-xs text-slate-400">Lead HIGH VALUE</div><div class="text-3xl font-bold text-emerald-400">${kpi.high_value}</div></div>
+          <div class="card p-4"><div class="text-xs text-slate-400">Email in coda</div><div class="text-3xl font-bold text-blue-400">${kpi.queued_emails}</div></div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card p-4">
+            <h3 class="font-semibold mb-3">Attività recenti</h3>
+            ${(kpi.recent_activity||[]).map(a=>`<div class="text-sm py-2 border-b border-slate-800">${a.type}: <b>${a.value}</b></div>`).join("")}
+          </div>
+          <div class="card p-4">
+            <h3 class="font-semibold mb-3">Suggerimenti aziende</h3>
+            ${(kpi.suggestions||[]).map(s=>`<div class="text-sm py-2 border-b border-slate-800">${s.company_name} · Lead #${s.lead_id} · Score ${s.score} · ${s.classification} · ${s.hint}</div>`).join("")}
+          </div>
+        </div>`;
+      document.getElementById('app').innerHTML = appLayout('dashboard', html);
+    } catch (e) {
+      clearSession(); navTo('/app/login');
+    }
+  })();
+</script>
+</html>

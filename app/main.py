@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import router as api_router
 from app.core.logger import setup_logging
@@ -26,6 +27,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(api_router)
+frontend_dir = Path(__file__).resolve().parent / "frontend"
+app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
 
 _stop_event = asyncio.Event()
 _scheduler_task: asyncio.Task | None = None
@@ -54,8 +57,26 @@ async def health() -> dict:
 
 @app.get("/")
 async def home() -> FileResponse:
-    html_path = Path(__file__).resolve().parent / "frontend" / "index.html"
+    html_path = frontend_dir / "index.html"
     return FileResponse(html_path)
+
+
+@app.get("/app/{page}")
+async def app_page(page: str) -> FileResponse:
+    allowed = {
+        "login",
+        "register",
+        "dashboard",
+        "search",
+        "leads",
+        "company",
+        "emails",
+        "settings",
+    }
+    if page not in allowed:
+        page = "dashboard"
+    file_path = frontend_dir / "pages" / f"{page}.html"
+    return FileResponse(file_path)
 
 
 @app.exception_handler(Exception)

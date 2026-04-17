@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Impostazioni - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body id="app"></body>
+<script>
+  if (!requireAuth()) {}
+  const remembered = App.rememberMe ? App.rememberedEmail : '';
+  const content = `
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="card p-4">
+        <h3 class="font-semibold mb-3">Sessione</h3>
+        <div class="text-sm mb-3">Sessione persistente: <b>${App.token ? 'attiva' : 'non attiva'}</b></div>
+        <button class="btn btn-ghost" onclick="clearSession();navTo('/app/login')">Disconnetti</button>
+      </div>
+      <div class="card p-4">
+        <h3 class="font-semibold mb-3">Remember Me</h3>
+        <div class="text-sm text-slate-300 mb-3">Email salvata: <b>${remembered || 'non disponibile'}</b></div>
+        <button class="btn btn-ghost" onclick="localStorage.removeItem('remember_email');localStorage.removeItem('remember_me');location.reload()">Rimuovi email salvata</button>
+      </div>
+      <div class="card p-4 md:col-span-2">
+        <h3 class="font-semibold mb-3">Stato piattaforma</h3>
+        <p id="health" class="text-sm text-slate-300">Verifica servizio...</p>
+      </div>
+    </div>`;
+  document.getElementById('app').innerHTML = appLayout('settings', content);
+  (async function() {
+    try {
+      const h = await fetch('/health').then(r => r.json());
+      document.getElementById('health').textContent = `Backend: ${h.status}`;
+    } catch {
+      document.getElementById('health').textContent = 'Backend non raggiungibile';
+    }
+  })();
+</script>
+</html>

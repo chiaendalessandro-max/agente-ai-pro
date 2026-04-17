@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dettaglio azienda - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body id="app"></body>
+<script>
+  if (!requireAuth()) {}
+  const content = `
+    <div id="box" class="card p-5">
+      <h2 class="text-xl font-bold mb-3">Dettaglio azienda</h2>
+      <div id="detail" class="space-y-2 text-sm text-slate-200">Caricamento...</div>
+    </div>`;
+  document.getElementById('app').innerHTML = appLayout('leads', content);
+
+  async function run() {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (!id) { document.getElementById('detail').textContent = 'Lead non valido'; return; }
+    try {
+      const d = await api(`/leads/${id}`);
+      document.getElementById('detail').innerHTML = `
+        <div><b>Azienda:</b> ${d.company_name}</div>
+        <div><b>Sito:</b> <a class="text-blue-400" target="_blank" href="${d.website}">${d.website}</a></div>
+        <div><b>Paese:</b> ${d.country}</div>
+        <div><b>Settore:</b> ${d.sector}</div>
+        <div><b>Dimensione:</b> ${d.size_estimate || '-'}</div>
+        <div><b>Score:</b> ${d.score} · ${d.classification} · <span class="px-2 py-1 rounded text-xs ${temperatureBadge(d.temperature)}">${d.temperature}</span></div>
+        <div><b>Email:</b> ${d.contact_email || '-'}</div>
+        <div><b>Telefono:</b> ${d.contact_phone || '-'}</div>
+        <div><b>Contact page:</b> ${d.contact_page ? `<a class="text-blue-400" target="_blank" href="${d.contact_page}">${d.contact_page}</a>` : '-'}</div>
+        <div><b>Descrizione:</b> ${d.description || '-'}</div>
+        <div><b>Analisi segnali:</b> ${d.value_signals || '-'}</div>
+      `;
+    } catch (e) {
+      document.getElementById('detail').textContent = e.message;
+    }
+  }
+  run();
+</script>
+</html>

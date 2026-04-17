@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body class="page-shell">
+  <div class="min-h-screen flex items-center justify-center p-6">
+    <div class="w-full max-w-md card p-6">
+      <h2 class="text-2xl font-bold mb-1">Login</h2>
+      <p class="text-slate-400 text-sm mb-5">Accedi al tuo workspace</p>
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="text-sm">Email</label>
+          <input id="email" type="email" class="input mt-1" required />
+        </div>
+        <div>
+          <label class="text-sm">Password</label>
+          <input id="password" type="password" class="input mt-1" required />
+        </div>
+        <label class="flex items-center gap-2 text-sm text-slate-300">
+          <input id="remember" type="checkbox" />
+          Remember me
+        </label>
+        <button class="btn btn-primary w-full">Entra</button>
+      </form>
+      <p class="text-sm text-slate-400 mt-4">Non hai un account? <a href="/app/register" class="text-blue-400">Registrati</a></p>
+      <p id="err" class="text-sm text-red-300 mt-3"></p>
+    </div>
+  </div>
+  <script>
+    if (App.token) navTo('/app/dashboard');
+    const emailEl = document.getElementById('email');
+    const rememberEl = document.getElementById('remember');
+    if (App.rememberMe) {
+      emailEl.value = App.rememberedEmail;
+      rememberEl.checked = true;
+    }
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      document.getElementById('err').textContent = '';
+      try {
+        const data = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: emailEl.value, password: document.getElementById('password').value })
+        });
+        setSession(data.access_token, data.refresh_token);
+        saveRemember(emailEl.value, rememberEl.checked);
+        navTo('/app/dashboard');
+      } catch (err) {
+        document.getElementById('err').textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

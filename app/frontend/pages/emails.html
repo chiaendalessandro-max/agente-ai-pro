@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Email Outreach - Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js"></script>
+</head>
+<body id="app"></body>
+<script>
+  if (!requireAuth()) {}
+  const content = `
+    <div class="card p-4 mb-4">
+      <h3 class="font-semibold mb-2">Genera email per Lead ID</h3>
+      <form id="f" class="flex gap-2">
+        <input id="leadId" class="input" type="number" min="1" placeholder="Lead ID" required />
+        <button class="btn btn-primary">Genera</button>
+      </form>
+      <p id="status" class="text-sm text-slate-300 mt-2"></p>
+    </div>
+    <div class="card overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-800"><tr><th class="text-left p-3">ID</th><th class="text-left p-3">Lead</th><th class="text-left p-3">Status</th><th class="text-left p-3">Oggetto</th><th class="text-left p-3">Retries</th><th class="text-left p-3">Errore</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>`;
+  document.getElementById('app').innerHTML = appLayout('emails', content);
+
+  async function load() {
+    const data = await api('/emails');
+    document.getElementById('rows').innerHTML = (data.items||[]).map(e => `
+      <tr class="border-t border-slate-800">
+        <td class="p-3">${e.id}</td><td class="p-3">${e.lead_id}</td><td class="p-3">${e.status}</td><td class="p-3">${e.subject}</td><td class="p-3">${e.retries}</td><td class="p-3">${e.error || '-'}</td>
+      </tr>`).join('');
+  }
+
+  document.getElementById('f').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id = document.getElementById('leadId').value;
+    try {
+      const r = await api(`/emails/${id}`, { method: 'POST', body: '{}' });
+      document.getElementById('status').textContent = `Email creata: ${r.status}`;
+      await load();
+    } catch (e) {
+      document.getElementById('status').textContent = e.message;
+    }
+  });
+  load();
+</script>
+</html>
