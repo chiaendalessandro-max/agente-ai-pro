@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agente AI Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hidden-view { display: none; }
+    .active-tab { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="authView" class="min-h-screen flex items-center justify-center p-6">
+    <div class="w-full max-w-5xl grid md:grid-cols-2 gap-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h2 class="text-2xl font-bold mb-1">Login</h2>
+        <p class="text-slate-400 text-sm mb-5">Accedi alla piattaforma SaaS</p>
+        <form id="loginForm" class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-300">Email</label>
+            <input id="loginEmail" type="email" required class="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label class="text-sm text-slate-300">Password</label>
+            <input id="loginPassword" type="password" required class="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          </div>
+          <button class="w-full bg-blue-600 hover:bg-blue-500 rounded-lg py-2 font-semibold">Entra</button>
+        </form>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h2 class="text-2xl font-bold mb-1">Registrazione</h2>
+        <p class="text-slate-400 text-sm mb-5">Crea un account aziendale</p>
+        <form id="registerForm" class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-300">Nome azienda</label>
+            <input id="regCompany" required class="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label class="text-sm text-slate-300">Email</label>
+            <input id="regEmail" type="email" required class="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label class="text-sm text-slate-300">Password</label>
+            <input id="regPassword" type="password" required minlength="8" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+          </div>
+          <button class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 font-semibold">Crea account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="appView" class="hidden-view">
+    <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
+      <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
+        <div>
+          <h1 class="text-2xl font-bold">Agente AI Pro</h1>
+          <p class="text-xs text-slate-400">Lead Generation & Sales Automation</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="whoami" class="text-sm text-slate-300"></span>
+          <button id="logoutBtn" class="px-3 py-2 text-sm rounded-lg border border-slate-700 hover:bg-slate-800">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+      <div class="flex flex-wrap gap-2 mb-6">
+        <button class="tab-btn active-tab border border-slate-700 px-4 py-2 rounded-lg text-sm" data-tab="dashboardTab">Dashboard</button>
+        <button class="tab-btn border border-slate-700 px-4 py-2 rounded-lg text-sm" data-tab="searchTab">Ricerca</button>
+        <button class="tab-btn border border-slate-700 px-4 py-2 rounded-lg text-sm" data-tab="leadsTab">Lead</button>
+        <button class="tab-btn border border-slate-700 px-4 py-2 rounded-lg text-sm" data-tab="emailsTab">Email / Outreach</button>
+        <button class="tab-btn border border-slate-700 px-4 py-2 rounded-lg text-sm" data-tab="followupsTab">Follow-ups</button>
+      </div>
+
+      <section id="dashboardTab" class="tab-panel">
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-slate-400 text-xs">Lead Totali</div><div id="kpi_total" class="text-3xl font-bold">0</div></div>
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-slate-400 text-xs">HIGH VALUE</div><div id="kpi_high" class="text-3xl font-bold text-emerald-400">0</div></div>
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-slate-400 text-xs">Email in coda</div><div id="kpi_email" class="text-3xl font-bold text-blue-400">0</div></div>
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-slate-400 text-xs">MEDIUM</div><div id="kpi_medium" class="text-2xl font-bold">0</div></div>
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-slate-400 text-xs">LOW</div><div id="kpi_low" class="text-2xl font-bold">0</div></div>
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-slate-400 text-xs">Follow-up schedulati</div><div id="kpi_followup" class="text-2xl font-bold text-amber-400">0</div></div>
+        </div>
+        <div class="mt-4 bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h3 class="font-semibold mb-2">Stato attività</h3>
+          <p id="activityStatus" class="text-sm text-slate-300">Pronto</p>
+        </div>
+      </section>
+
+      <section id="searchTab" class="tab-panel hidden-view">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h3 class="font-semibold mb-4">Ricerca aziende globale</h3>
+          <form id="searchForm" class="grid md:grid-cols-5 gap-3">
+            <input id="searchQuery" required placeholder="Es: private banking, biotech, luxury travel..." class="md:col-span-2 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+            <input id="searchCountry" placeholder="Paese (IT, DE, FR...)" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+            <input id="searchSector" placeholder="Settore" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+            <input id="searchLimit" type="number" min="1" max="50" value="10" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2">
+            <button class="md:col-span-5 bg-blue-600 hover:bg-blue-500 rounded-lg py-2 font-semibold">Avvia ricerca</button>
+          </form>
+          <div id="searchLoading" class="hidden mt-3 text-sm text-blue-300">Ricerca in corso...</div>
+        </div>
+        <div class="mt-4 bg-slate-900 border border-slate-800 rounded-xl overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-slate-300">
+              <tr><th class="text-left p-3">Azienda</th><th class="text-left p-3">Paese</th><th class="text-left p-3">Settore</th><th class="text-left p-3">Score</th><th class="text-left p-3">Classificazione</th></tr>
+            </thead>
+            <tbody id="searchResultsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="leadsTab" class="tab-panel hidden-view">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-slate-300">
+              <tr>
+                <th class="text-left p-3">Azienda</th>
+                <th class="text-left p-3">Paese</th>
+                <th class="text-left p-3">Score</th>
+                <th class="text-left p-3">Stato</th>
+                <th class="text-left p-3">Contatto</th>
+                <th class="text-left p-3">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="leadsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="emailsTab" class="tab-panel hidden-view">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-slate-300">
+              <tr><th class="text-left p-3">Lead ID</th><th class="text-left p-3">Status</th><th class="text-left p-3">Oggetto</th><th class="text-left p-3">Retries</th><th class="text-left p-3">Errore</th></tr>
+            </thead>
+            <tbody id="emailsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="followupsTab" class="tab-panel hidden-view">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-800 text-slate-300">
+              <tr><th class="text-left p-3">ID</th><th class="text-left p-3">Lead</th><th class="text-left p-3">Canale</th><th class="text-left p-3">Due At</th><th class="text-left p-3">Stato</th></tr>
+            </thead>
+            <tbody id="followupsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="companyModal" class="hidden fixed inset-0 bg-black/70 p-4 z-50">
+    <div class="max-w-2xl mx-auto bg-slate-900 border border-slate-700 rounded-2xl p-5 mt-8">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-bold">Dettaglio azienda</h3>
+        <button id="closeModalBtn" class="px-2 py-1 border border-slate-600 rounded">X</button>
+      </div>
+      <div id="companyDetail" class="text-sm text-slate-200 space-y-2"></div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      token: localStorage.getItem("access_token") || "",
+      refresh: localStorage.getItem("refresh_token") || "",
+      leads: [],
+      page: 1,
+      pageSize: 20
+    };
+
+    const q = (id) => document.getElementById(id);
+
+    async function apiFetch(path, options = {}) {
+      const headers = options.headers || {};
+      headers["Content-Type"] = headers["Content-Type"] || "application/json";
+      if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+      const res = await fetch(path, { ...options, headers });
+      if (res.status === 401) throw new Error("Sessione scaduta");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Errore API");
+      return data;
+    }
+
+    function notify(msg, isError = false) {
+      q("activityStatus").textContent = msg;
+      q("activityStatus").className = isError ? "text-sm text-red-300" : "text-sm text-slate-300";
+    }
+
+    function showApp() {
+      q("authView").classList.add("hidden-view");
+      q("appView").classList.remove("hidden-view");
+    }
+
+    function showAuth() {
+      q("authView").classList.remove("hidden-view");
+      q("appView").classList.add("hidden-view");
+    }
+
+    function switchTab(id) {
+      document.querySelectorAll(".tab-panel").forEach((el) => el.classList.add("hidden-view"));
+      document.querySelectorAll(".tab-btn").forEach((el) => el.classList.remove("active-tab"));
+      q(id).classList.remove("hidden-view");
+      document.querySelector(`[data-tab="${id}"]`).classList.add("active-tab");
+    }
+
+    async function loadKpi() {
+      const data = await apiFetch("/kpi");
+      q("kpi_total").textContent = data.total_leads;
+      q("kpi_high").textContent = data.high_value;
+      q("kpi_medium").textContent = data.medium_value;
+      q("kpi_low").textContent = data.low_value;
+      q("kpi_email").textContent = data.queued_emails;
+      q("kpi_followup").textContent = data.scheduled_followups;
+    }
+
+    async function loadLeads() {
+      const leads = await apiFetch(`/leads?page=${state.page}&page_size=${state.pageSize}`);
+      state.leads = leads;
+      q("leadsBody").innerHTML = leads.map((l) => `
+        <tr class="border-t border-slate-800">
+          <td class="p-3">${l.company_name}</td>
+          <td class="p-3">${l.country || "-"}</td>
+          <td class="p-3">${l.score}</td>
+          <td class="p-3"><span class="px-2 py-1 rounded text-xs ${l.classification === "HIGH VALUE" ? "bg-emerald-900 text-emerald-300" : l.classification === "MEDIUM" ? "bg-amber-900 text-amber-300" : "bg-slate-800 text-slate-300"}">${l.classification}</span></td>
+          <td class="p-3">${l.contact_email || "-"}<br>${l.contact_phone || ""}</td>
+          <td class="p-3">
+            <div class="flex gap-2 flex-wrap">
+              <button onclick="openCompany('${l.website}')" class="px-2 py-1 text-xs border border-slate-700 rounded hover:bg-slate-800">Dettaglio</button>
+              <button onclick="generateEmail(${l.id})" class="px-2 py-1 text-xs border border-blue-700 rounded hover:bg-blue-800">Email</button>
+              <button onclick="createFollowup(${l.id})" class="px-2 py-1 text-xs border border-amber-700 rounded hover:bg-amber-800">Follow-up</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    async function loadEmails() {
+      const data = await apiFetch("/emails");
+      q("emailsBody").innerHTML = (data.items || []).map((e) => `
+        <tr class="border-t border-slate-800">
+          <td class="p-3">${e.lead_id}</td>
+          <td class="p-3">${e.status}</td>
+          <td class="p-3">${e.subject}</td>
+          <td class="p-3">${e.retries}</td>
+          <td class="p-3 text-red-300">${e.error || "-"}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function loadFollowups() {
+      const data = await apiFetch("/followups");
+      q("followupsBody").innerHTML = (data.items || []).map((f) => `
+        <tr class="border-t border-slate-800">
+          <td class="p-3">${f.id}</td>
+          <td class="p-3">${f.lead_id}</td>
+          <td class="p-3">${f.channel}</td>
+          <td class="p-3">${f.due_at}</td>
+          <td class="p-3">${f.status}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function openCompany(website) {
+      try {
+        const data = await apiFetch("/analyze-company", { method: "POST", body: JSON.stringify({ website }) });
+        q("companyDetail").innerHTML = `
+          <div><b>Nome:</b> ${data.name}</div>
+          <div><b>Sito:</b> <a class="text-blue-400" target="_blank" href="${data.website}">${data.website}</a></div>
+          <div><b>Paese:</b> ${data.country}</div>
+          <div><b>Settore:</b> ${data.sector}</div>
+          <div><b>Dimensione:</b> ${data.size_estimate}</div>
+          <div><b>Email:</b> ${data.contact_email || "-"}</div>
+          <div><b>Telefono:</b> ${data.contact_phone || "-"}</div>
+          <div><b>Analisi:</b> ${data.description || "-"}</div>
+        `;
+        q("companyModal").classList.remove("hidden");
+      } catch (e) {
+        notify(e.message, true);
+      }
+    }
+
+    async function generateEmail(leadId) {
+      try {
+        const data = await apiFetch(`/emails/${leadId}`, { method: "POST", body: "{}" });
+        notify(`Email ${data.status} per lead ${leadId}`);
+        await loadEmails();
+        await loadKpi();
+      } catch (e) {
+        notify(e.message, true);
+      }
+    }
+
+    async function createFollowup(leadId) {
+      try {
+        const data = await apiFetch(`/followups/${leadId}`, { method: "POST", body: "{}" });
+        notify(`Follow-up schedulato (${data.due_at})`);
+        await loadFollowups();
+        await loadKpi();
+      } catch (e) {
+        notify(e.message, true);
+      }
+    }
+
+    q("loginForm").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        const data = await apiFetch("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email: q("loginEmail").value, password: q("loginPassword").value })
+        });
+        state.token = data.access_token;
+        state.refresh = data.refresh_token;
+        localStorage.setItem("access_token", state.token);
+        localStorage.setItem("refresh_token", state.refresh);
+        q("whoami").textContent = q("loginEmail").value;
+        showApp();
+        await Promise.all([loadKpi(), loadLeads(), loadEmails(), loadFollowups()]);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    q("registerForm").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        await apiFetch("/auth/register", {
+          method: "POST",
+          body: JSON.stringify({
+            email: q("regEmail").value,
+            password: q("regPassword").value,
+            company_name: q("regCompany").value
+          })
+        });
+        alert("Registrazione completata");
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    q("searchForm").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      q("searchLoading").classList.remove("hidden");
+      try {
+        const data = await apiFetch("/search-global", {
+          method: "POST",
+          body: JSON.stringify({
+            query: q("searchQuery").value,
+            country: q("searchCountry").value,
+            sector: q("searchSector").value,
+            limit: Number(q("searchLimit").value || 10)
+          })
+        });
+        q("searchResultsBody").innerHTML = (data.results || []).map((r) => `
+          <tr class="border-t border-slate-800">
+            <td class="p-3">${r.name}</td>
+            <td class="p-3">${r.country}</td>
+            <td class="p-3">${r.sector}</td>
+            <td class="p-3">${r.score}</td>
+            <td class="p-3">${r.classification}</td>
+          </tr>
+        `).join("");
+        notify(`Ricerca completata: ${data.saved} lead salvati`);
+        await Promise.all([loadKpi(), loadLeads()]);
+      } catch (e) {
+        notify(e.message, true);
+      } finally {
+        q("searchLoading").classList.add("hidden");
+      }
+    });
+
+    q("logoutBtn").addEventListener("click", () => {
+      state.token = "";
+      state.refresh = "";
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      showAuth();
+    });
+
+    q("closeModalBtn").addEventListener("click", () => q("companyModal").classList.add("hidden"));
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    });
+
+    async function boot() {
+      if (!state.token) {
+        showAuth();
+        return;
+      }
+      showApp();
+      q("whoami").textContent = "Sessione attiva";
+      try {
+        await Promise.all([loadKpi(), loadLeads(), loadEmails(), loadFollowups()]);
+      } catch {
+        showAuth();
+      }
+    }
+
+    window.openCompany = openCompany;
+    window.generateEmail = generateEmail;
+    window.createFollowup = createFollowup;
+
+    boot();
+  </script>
+</body>
+</html>

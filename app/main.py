@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.api.router import router as api_router
 from app.core.logger import setup_logging
@@ -51,41 +52,10 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home() -> str:
-    return """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Agente AI Pro</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <div class="max-w-6xl mx-auto p-6">
-    <h1 class="text-3xl font-bold mb-6">Agente AI Pro</h1>
-    <div class="grid md:grid-cols-3 gap-4 mb-6">
-      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
-        <div class="text-slate-400 text-sm">API Docs</div>
-        <a class="text-blue-400" href="/docs">Apri /docs</a>
-      </div>
-      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
-        <div class="text-slate-400 text-sm">Health</div>
-        <a class="text-blue-400" href="/health">Apri /health</a>
-      </div>
-      <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
-        <div class="text-slate-400 text-sm">Status</div>
-        <div class="text-emerald-400">Online</div>
-      </div>
-    </div>
-    <div class="bg-slate-900 rounded-xl p-4 border border-slate-800">
-      <p class="text-slate-300">Piattaforma SaaS lead generation e sales automation pronta per produzione.</p>
-    </div>
-  </div>
-</body>
-</html>
-"""
+@app.get("/")
+async def home() -> FileResponse:
+    html_path = Path(__file__).resolve().parent / "frontend" / "index.html"
+    return FileResponse(html_path)
 
 
 @app.exception_handler(Exception)
