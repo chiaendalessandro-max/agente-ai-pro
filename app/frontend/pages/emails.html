@@ -14,9 +14,10 @@
   const content = `
     <div class="card p-4 mb-4">
       <h3 class="font-semibold mb-2">Genera email per Lead ID</h3>
-      <form id="f" class="flex gap-2">
+      <form id="f" class="flex flex-wrap gap-2">
         <input id="leadId" class="input" type="number" min="1" placeholder="Lead ID" required />
         <button class="btn btn-primary">Genera</button>
+        <button id="mkFollowup" type="button" class="btn btn-ghost">Crea Follow-up</button>
       </form>
       <p id="status" class="text-sm text-slate-300 mt-2"></p>
     </div>
@@ -40,9 +41,19 @@
     ev.preventDefault();
     const id = document.getElementById('leadId').value;
     try {
-      const r = await api(`/emails/${id}`, { method: 'POST', body: '{}' });
+      const r = await api(`/emails/${id}`, { method: 'POST' });
       document.getElementById('status').textContent = `Email creata: ${r.status}`;
       await load();
+    } catch (e) {
+      document.getElementById('status').textContent = e.message;
+    }
+  });
+  document.getElementById('mkFollowup').addEventListener('click', async () => {
+    const id = document.getElementById('leadId').value;
+    if (!id) return;
+    try {
+      const r = await api(`/followups/${id}`, { method: 'POST' });
+      document.getElementById('status').textContent = `Follow-up creato: ${r.status} (${r.due_at})`;
     } catch (e) {
       document.getElementById('status').textContent = e.message;
     }

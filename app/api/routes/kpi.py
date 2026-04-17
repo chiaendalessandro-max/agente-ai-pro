@@ -48,6 +48,17 @@ async def get_kpi(user: User = Depends(get_current_user), db: AsyncSession = Dep
         {"type": "email_queue", "value": int(emails or 0)},
         {"type": "followups", "value": int(followups or 0)},
     ]
+    next_actions: list[str] = []
+    if (total or 0) == 0:
+        next_actions.append("Avvia una prima ricerca globale dalla sezione Ricerca")
+    if (high or 0) > 0:
+        next_actions.append("Contatta oggi i lead HIGH VALUE per massimizzare conversione")
+    if (emails or 0) == 0 and (total or 0) > 0:
+        next_actions.append("Genera email personalizzate dalla sezione Email/Outreach")
+    if (followups or 0) == 0 and (total or 0) > 0:
+        next_actions.append("Pianifica follow-up automatici sui lead più caldi")
+    if not next_actions:
+        next_actions.append("Pipeline in ordine: continua con nuove ricerche e nurturing")
     return KpiOut(
         total_leads=total or 0,
         high_value=high or 0,
@@ -57,4 +68,5 @@ async def get_kpi(user: User = Depends(get_current_user), db: AsyncSession = Dep
         scheduled_followups=followups or 0,
         suggestions=suggestions,
         recent_activity=recent_activity,
+        next_actions=next_actions,
     )

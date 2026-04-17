@@ -41,12 +41,37 @@ function navTo(path) {
   window.location.href = path;
 }
 
+async function tryRefreshToken() {
+  if (!App.refresh) return false;
+  try {
+    const res = await fetch("/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: App.refresh }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    setSession(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function api(path, options = {}) {
   const headers = options.headers || {};
   if (!headers["Content-Type"] && options.body !== undefined) headers["Content-Type"] = "application/json";
   if (App.token) headers["Authorization"] = `Bearer ${App.token}`;
-  const res = await fetch(path, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
+  let res = await fetch(path, { ...options, headers });
+  let data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      headers["Authorization"] = `Bearer ${App.token}`;
+      res = await fetch(path, { ...options, headers });
+      data = await res.json().catch(() => ({}));
+    }
+  }
   if (!res.ok) throw new Error(data.detail || "Errore API");
   return data;
 }

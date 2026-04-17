@@ -33,28 +33,21 @@ async def search_global(seed: str, country: str, sector: str, limit: int) -> lis
     seen: set[str] = set()
     websites: list[str] = []
 
-    try:
-        with DDGS() as ddgs:
-            for q in queries:
-                try:
-                    for item in ddgs.text(q, max_results=12):
-                        url = item.get("href") or item.get("url") or ""
-                        if not _valid(url):
-                            continue
-                        domain = urlparse(url).netloc.lower().replace("www.", "")
-                        if domain in seen:
-                            continue
-                        seen.add(domain)
-                        websites.append(f"https://{domain}")
-                        if len(websites) >= limit:
-                            break
-                except Exception:
+    with DDGS() as ddgs:
+        for q in queries:
+            for item in ddgs.text(q, max_results=12):
+                url = item.get("href") or item.get("url") or ""
+                if not _valid(url):
                     continue
+                domain = urlparse(url).netloc.lower().replace("www.", "")
+                if domain in seen:
+                    continue
+                seen.add(domain)
+                websites.append(f"https://{domain}")
                 if len(websites) >= limit:
                     break
-    except Exception:
-        # Keep app stable when search providers throttle/fail.
-        websites = []
+            if len(websites) >= limit:
+                break
 
     leads: list[dict] = []
     for site in websites:

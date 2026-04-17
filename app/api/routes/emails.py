@@ -26,6 +26,21 @@ async def create_email(lead_id: int, user: User = Depends(get_current_user), db:
     if not row:
         raise HTTPException(status_code=404, detail="Lead not found")
     lead, company = row
+    last_email_q = await db.execute(
+        select(EmailQueue)
+        .where(EmailQueue.lead_id == lead.id)
+        .order_by(EmailQueue.id.desc())
+        .limit(1)
+    )
+    last_email = last_email_q.scalar_one_or_none()
+    if last_email and (last_email.status in {"sent", "draft", "queued"}):
+        return EmailDraftOut(
+            id=last_email.id,
+            status=last_email.status,
+            subject=last_email.subject,
+            body=last_email.body,
+            error=last_email.error,
+        )
     subject, body = make_email(company.name, company.sector, company.description, lead.score)
     status, error = send_or_draft(lead.contact_email, subject, body)
     item = EmailQueue(lead_id=lead.id, subject=subject, body=body, status=status, error=error)

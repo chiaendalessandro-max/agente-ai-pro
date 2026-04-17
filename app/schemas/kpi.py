@@ -10,3 +10,4 @@ class KpiOut(BaseModel):
     scheduled_followups: int
     suggestions: list[dict]
     recent_activity: list[dict]
+    next_actions: list[str]

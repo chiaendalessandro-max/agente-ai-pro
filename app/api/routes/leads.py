@@ -46,13 +46,7 @@ async def search_global_endpoint(
     if hit is not None:
         return hit
 
-    try:
-        results = await search_global(payload.query, payload.country, payload.sector, payload.limit)
-    except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail="Search provider temporarily unavailable. Retry in a few seconds.",
-        )
+    results = await search_global(payload.query, payload.country, payload.sector, payload.limit)
     saved = 0
     for item in results:
         existing_company_q = await db.execute(select(Company).where(Company.domain == item["domain"]))
@@ -121,20 +115,24 @@ async def score_lead_endpoint(payload: ScoreLeadIn, user: User = Depends(get_cur
 async def list_leads(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    q: str = Query(default="", max_length=120),
+    temperature: str = Query(default="", max_length=10),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[LeadItemOut]:
     offset = (page - 1) * page_size
-    result = await db.execute(
+    stmt = (
         select(Lead, Company)
         .join(Company, Lead.company_id == Company.id)
         .where(Lead.user_id == user.id)
-        .order_by(Lead.score.desc(), Lead.id.desc())
-        .offset(offset)
-        .limit(page_size)
     )
+    if q.strip():
+        q_clean = f"%{q.strip().lower()}%"
+        stmt = stmt.where((Company.name.ilike(q_clean)) | (Company.sector.ilike(q_clean)) | (Company.country.ilike(q_clean)))
+    stmt = stmt.order_by(Lead.score.desc(), Lead.id.desc()).offset(offset).limit(page_size)
+    result = await db.execute(stmt)
     rows = result.all()
-    return [
+    out = [
         LeadItemOut(
             id=l.id,
             company_name=c.name,
@@ -149,6 +147,10 @@ async def list_leads(
         )
         for l, c in rows
     ]
+    if temperature.strip().upper() in {"HOT", "WARM", "COLD"}:
+        t = temperature.strip().upper()
+        out = [item for item in out if item.temperature == t]
+    return out
 
 
 @router.get("/leads/{lead_id}")
@@ -197,3 +199,37 @@ async def set_lead_temperature(
     lead.notes = f"TEMP:{value}"
     await db.commit()
     return {"ok": True, "temperature": value}
+
+
+@router.get("/high-value-leads", response_model=list[LeadItemOut])
+async def high_value_leads(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[LeadItemOut]:
+    offset = (page - 1) * page_size
+    result = await db.execute(
+        select(Lead, Company)
+        .join(Company, Lead.company_id == Company.id)
+        .where(Lead.user_id == user.id, Lead.score >= 70)
+        .order_by(Lead.score.desc(), Lead.id.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    rows = result.all()
+    return [
+        LeadItemOut(
+            id=l.id,
+            company_name=c.name,
+            website=c.website,
+            score=l.score,
+            classification=l.classification,
+            temperature=_temperature_from_lead(l),
+            sector=c.sector,
+            country=c.country,
+            contact_email=l.contact_email,
+            contact_phone=l.contact_phone,
+        )
+        for l, c in rows
+    ]

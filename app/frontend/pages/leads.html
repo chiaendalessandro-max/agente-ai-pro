@@ -12,6 +12,17 @@
 <script>
   if (!requireAuth()) {}
   const content = `
+    <div class="card p-4 mb-4">
+      <div class="grid md:grid-cols-4 gap-3">
+        <input id="q" class="input" placeholder="Cerca per azienda/settore/paese" />
+        <select id="t" class="input">
+          <option value="">Tutti gli stati</option>
+          <option>HOT</option><option>WARM</option><option>COLD</option>
+        </select>
+        <button id="applyFilter" class="btn btn-ghost">Applica filtri</button>
+        <button id="onlyHigh" class="btn btn-primary">Solo HIGH VALUE</button>
+      </div>
+    </div>
     <div class="card overflow-auto">
       <table class="w-full text-sm">
         <thead class="bg-slate-800"><tr>
@@ -22,8 +33,11 @@
     </div>`;
   document.getElementById('app').innerHTML = appLayout('leads', content);
 
-  async function load() {
-    const leads = await api('/leads?page=1&page_size=100');
+  async function load(onlyHigh = false) {
+    const q = encodeURIComponent((document.getElementById('q')?.value || '').trim());
+    const t = encodeURIComponent((document.getElementById('t')?.value || '').trim());
+    const endpoint = onlyHigh ? '/high-value-leads?page=1&page_size=100' : `/leads?page=1&page_size=100&q=${q}&temperature=${t}`;
+    const leads = await api(endpoint);
     document.getElementById('rows').innerHTML = (leads||[]).map(l => `
       <tr class="border-t border-slate-800">
         <td class="p-3">${l.company_name}</td>
@@ -50,6 +64,8 @@
     } catch (e) { alert(e.message); }
   }
   window.setTemp = setTemp;
-  load();
+  document.getElementById('applyFilter').addEventListener('click', () => load(false));
+  document.getElementById('onlyHigh').addEventListener('click', () => load(true));
+  load(false);
 </script>
 </html>

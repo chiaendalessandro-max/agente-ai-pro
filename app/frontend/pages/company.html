@@ -14,6 +14,10 @@
   const content = `
     <div id="box" class="card p-5">
       <h2 class="text-xl font-bold mb-3">Dettaglio azienda</h2>
+      <div class="mb-4 flex gap-2">
+        <a class="btn btn-ghost text-sm" href="/app/leads">Torna ai lead</a>
+        <a class="btn btn-primary text-sm" href="/app/emails">Vai a Outreach</a>
+      </div>
       <div id="detail" class="space-y-2 text-sm text-slate-200">Caricamento...</div>
     </div>`;
   document.getElementById('app').innerHTML = appLayout('leads', content);
