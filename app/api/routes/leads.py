@@ -57,7 +57,13 @@ async def search_global_endpoint(
         return hit
 
     try:
-        packed = await run_global_search(payload.query, payload.country, payload.sector, payload.limit)
+        packed = await run_global_search(
+            payload.query,
+            payload.country,
+            payload.sector,
+            payload.limit,
+            min_confidence=payload.min_confidence,
+        )
         results = list(packed.get("results") or [])
         meta = packed.get("meta") or {}
     except Exception as exc:

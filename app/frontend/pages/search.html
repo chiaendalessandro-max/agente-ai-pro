@@ -16,7 +16,7 @@
       <h3 class="font-semibold text-blue-300 mb-2">Come provarlo (2 minuti)</h3>
       <ol class="text-sm text-slate-300 list-decimal list-inside space-y-1">
         <li>Assicurati di essere <strong>loggato</strong> (altrimenti la ricerca non parte).</li>
-        <li>Scrivi una query ampia (es. <code class="text-blue-200">luxury hotel group</code> o <code class="text-blue-200">fintech payments</code>), opzionale paese/settore.</li>
+        <li>Scrivi una query ampia (es. <code class="text-blue-200">private jet broker</code>) e indica il <strong>Paese</strong> (es. <code class="text-blue-200">Italia</code> o <code class="text-blue-200">IT</code>) per query localizzate e filtro affidabilità.</li>
         <li>Clicca <strong>Cerca</strong> e attendi 30–90 secondi: analizza i siti in background.</li>
         <li>I lead vengono <strong>salvati in automatico</strong>: apri la scheda <a href="/app/leads" class="text-blue-400 underline">Lead</a> per vederli tutti.</li>
       </ol>
@@ -26,7 +26,7 @@
       <h3 class="font-semibold mb-3">Ricerca aziende globale</h3>
       <form id="f" class="grid md:grid-cols-5 gap-3">
         <input id="q" class="input md:col-span-2" placeholder="Es: private banking, biotech, luxury..." required />
-        <input id="country" class="input" placeholder="Paese (IT, DE...)" />
+        <input id="country" class="input" placeholder="Paese (Italia, IT, Germany…)" />
         <input id="sector" class="input" placeholder="Settore" />
         <input id="limit" class="input" type="number" min="1" max="50" value="10" />
         <button class="btn btn-primary md:col-span-5">Cerca</button>
@@ -35,8 +35,8 @@
     </div>
     <div class="card overflow-auto">
       <table class="w-full text-sm">
-        <thead class="bg-slate-800"><tr><th class="text-left p-3">Azienda</th><th class="text-left p-3">Paese</th><th class="text-left p-3">Settore</th><th class="text-left p-3">Score</th><th class="text-left p-3">Classificazione</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="p-6 text-center text-slate-500">Nessun dato: compila la query e premi <strong>Cerca</strong>.</td></tr></tbody>
+        <thead class="bg-slate-800"><tr><th class="text-left p-3">Azienda</th><th class="text-left p-3">Paese</th><th class="text-left p-3">Settore</th><th class="text-left p-3">Score</th><th class="text-left p-3">Class.</th><th class="text-left p-3">Conf.</th><th class="text-left p-3">Fonte</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="p-6 text-center text-slate-500">Nessun dato: compila la query e premi <strong>Cerca</strong>.</td></tr></tbody>
       </table>
     </div>`;
   document.getElementById('app').innerHTML = appLayout('search', content);
@@ -46,7 +46,7 @@
     const status = document.getElementById('status');
     const rows = document.getElementById('rows');
     status.textContent = 'Ricerca in corso… (analisi siti, può richiedere fino a 1–2 minuti)';
-    rows.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">Attendere…</td></tr>';
+    rows.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-slate-400">Attendere…</td></tr>';
     try {
       const data = await api('/search-global', {
         method: 'POST',
@@ -54,24 +54,25 @@
           query: document.getElementById('q').value,
           country: document.getElementById('country').value,
           sector: document.getElementById('sector').value,
-          limit: Number(document.getElementById('limit').value || 10)
+          limit: Number(document.getElementById('limit').value || 10),
+          min_confidence: 0.28
         })
       });
       const n = (data.results || []).length;
       const m = data.meta || {};
-      const meta = ` · percorso: ${m.provider_path || "?"} · DDGS: ${m.ddgs_primary_backend || "-"}${m.ddgs_fallback_backend ? "/" + m.ddgs_fallback_backend : ""} · URL brand: ${m.brand_guess_urls ?? 0}`;
+      const meta = ` · filtro paese: ${m.country_resolved || "—"} · soglia conf.: ${m.confidence_threshold_effective ?? "?"} · passi: ${m.provider_path || "?"} · URL analizzati: ${m.urls_before_analyze ?? 0}`;
       status.textContent = `Completata. Risultati in tabella: ${n}. Nuovi lead salvati nel DB: ${data.saved}.${meta}`;
       if (!n) {
-        rows.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">Nessun risultato analizzabile (blocco rete, timeout o nessun sito utile). Prova un\'altra query più generica o controlla i log su Render.</td></tr>';
+        rows.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400">Nessun risultato sopra soglia di affidabilità. Indica il paese (es. Italia), allarga la query o abbassa <code class="text-slate-300">min_confidence</code> via API.</td></tr>';
       } else {
         rows.innerHTML = (data.results||[]).map(r => `
         <tr class="border-t border-slate-800">
-          <td class="p-3">${r.name}</td><td class="p-3">${r.country}</td><td class="p-3">${r.sector}</td><td class="p-3">${r.score}</td><td class="p-3">${r.classification}</td>
+          <td class="p-3">${r.name}</td><td class="p-3">${r.country}</td><td class="p-3">${r.sector}</td><td class="p-3">${r.score}</td><td class="p-3">${r.classification}</td><td class="p-3">${(r.confidence ?? "").toString().slice(0,5)}</td><td class="p-3 text-xs">${r.discovery_source || ""}</td>
         </tr>`).join("");
       }
     } catch (err) {
       status.textContent = err.message || 'Errore di rete o sessione scaduta. Riprova il login.';
-      rows.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-red-300">Errore. Se vedi 401, fai di nuovo login da /app/login</td></tr>';
+      rows.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-red-300">Errore. Se vedi 401, fai di nuovo login da /app/login</td></tr>';
     }
   });
 </script>

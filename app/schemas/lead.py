@@ -6,6 +6,7 @@ class SearchGlobalIn(BaseModel):
     country: str = Field(default="", max_length=80)
     sector: str = Field(default="", max_length=120)
     limit: int = Field(default=10, ge=1, le=50)
+    min_confidence: float = Field(default=0.32, ge=0.05, le=0.95)
 
 
 class AnalyzeCompanyIn(BaseModel):
