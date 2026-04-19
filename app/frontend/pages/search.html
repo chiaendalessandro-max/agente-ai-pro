@@ -12,6 +12,16 @@
 <script>
   if (!requireAuth()) {}
   const content = `
+    <div class="card p-4 mb-4 border-blue-900/50 bg-slate-900/40">
+      <h3 class="font-semibold text-blue-300 mb-2">Come provarlo (2 minuti)</h3>
+      <ol class="text-sm text-slate-300 list-decimal list-inside space-y-1">
+        <li>Assicurati di essere <strong>loggato</strong> (altrimenti la ricerca non parte).</li>
+        <li>Scrivi una query ampia (es. <code class="text-blue-200">luxury hotel group</code> o <code class="text-blue-200">fintech payments</code>), opzionale paese/settore.</li>
+        <li>Clicca <strong>Cerca</strong> e attendi 30–90 secondi: analizza i siti in background.</li>
+        <li>I lead vengono <strong>salvati in automatico</strong>: apri la scheda <a href="/app/leads" class="text-blue-400 underline">Lead</a> per vederli tutti.</li>
+      </ol>
+      <p class="text-xs text-slate-500 mt-2">Le pagine sono separate (URL <code class="text-slate-400">/app/ricerca</code>, <code class="text-slate-400">/app/leads</code>, ecc.): il menu in alto resta uguale per comodità tipo CRM.</p>
+    </div>
     <div class="card p-4 mb-4">
       <h3 class="font-semibold mb-3">Ricerca aziende globale</h3>
       <form id="f" class="grid md:grid-cols-5 gap-3">
@@ -21,12 +31,12 @@
         <input id="limit" class="input" type="number" min="1" max="50" value="10" />
         <button class="btn btn-primary md:col-span-5">Cerca</button>
       </form>
-      <p id="status" class="text-sm text-slate-300 mt-2"></p>
+      <p id="status" class="text-sm text-amber-200/90 mt-2 min-h-[1.25rem]"></p>
     </div>
     <div class="card overflow-auto">
       <table class="w-full text-sm">
         <thead class="bg-slate-800"><tr><th class="text-left p-3">Azienda</th><th class="text-left p-3">Paese</th><th class="text-left p-3">Settore</th><th class="text-left p-3">Score</th><th class="text-left p-3">Classificazione</th></tr></thead>
-        <tbody id="rows"></tbody>
+        <tbody id="rows"><tr><td colspan="5" class="p-6 text-center text-slate-500">Nessun dato: compila la query e premi <strong>Cerca</strong>.</td></tr></tbody>
       </table>
     </div>`;
   document.getElementById('app').innerHTML = appLayout('search', content);
@@ -34,7 +44,9 @@
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const status = document.getElementById('status');
-    status.textContent = 'Ricerca in corso...';
+    const rows = document.getElementById('rows');
+    status.textContent = 'Ricerca in corso… (analisi siti, può richiedere fino a 1–2 minuti)';
+    rows.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">Attendere…</td></tr>';
     try {
       const data = await api('/search-global', {
         method: 'POST',
@@ -45,13 +57,20 @@
           limit: Number(document.getElementById('limit').value || 10)
         })
       });
-      status.textContent = `Completata. Lead salvati: ${data.saved}`;
-      document.getElementById('rows').innerHTML = (data.results||[]).map(r => `
+      const n = (data.results || []).length;
+      const meta = (data.meta && data.meta.provider_path) ? ` · percorso: ${data.meta.provider_path}` : '';
+      status.textContent = `Completata. Risultati in tabella: ${n}. Nuovi lead salvati nel DB: ${data.saved}.${meta}`;
+      if (!n) {
+        rows.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">Nessun risultato analizzabile (blocco rete, timeout o nessun sito utile). Prova un\'altra query più generica o controlla i log su Render.</td></tr>';
+      } else {
+        rows.innerHTML = (data.results||[]).map(r => `
         <tr class="border-t border-slate-800">
           <td class="p-3">${r.name}</td><td class="p-3">${r.country}</td><td class="p-3">${r.sector}</td><td class="p-3">${r.score}</td><td class="p-3">${r.classification}</td>
         </tr>`).join("");
+      }
     } catch (err) {
-      status.textContent = err.message;
+      status.textContent = err.message || 'Errore di rete o sessione scaduta. Riprova il login.';
+      rows.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-red-300">Errore. Se vedi 401, fai di nuovo login da /app/login</td></tr>';
     }
   });
 </script>
