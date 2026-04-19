@@ -58,7 +58,8 @@
         })
       });
       const n = (data.results || []).length;
-      const meta = (data.meta && data.meta.provider_path) ? ` · percorso: ${data.meta.provider_path}` : '';
+      const m = data.meta || {};
+      const meta = ` · percorso: ${m.provider_path || "?"} · DDGS: ${m.ddgs_primary_backend || "-"}${m.ddgs_fallback_backend ? "/" + m.ddgs_fallback_backend : ""} · URL brand: ${m.brand_guess_urls ?? 0}`;
       status.textContent = `Completata. Risultati in tabella: ${n}. Nuovi lead salvati nel DB: ${data.saved}.${meta}`;
       if (!n) {
         rows.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">Nessun risultato analizzabile (blocco rete, timeout o nessun sito utile). Prova un\'altra query più generica o controlla i log su Render.</td></tr>';

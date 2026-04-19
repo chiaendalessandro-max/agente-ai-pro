@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from app.core.config import settings
-from app.services.ai_providers import discover_urls_fallback, discover_urls_primary
+from app.services.ai_providers import discover_urls_fallback, discover_urls_primary, guess_brand_urls
 from app.services.analyzer_service import safe_analyze_company
 from app.services.data_quality import dedupe_leads_by_domain, normalize_lead_dict
 from app.services.scoring_service import score_lead
@@ -43,13 +43,22 @@ async def run_global_search(seed: str, country: str, sector: str, limit: int) ->
     Non solleva eccezioni verso l'API: restituisce sempre struttura coerente.
     """
     limit = max(1, min(50, int(limit)))
-    meta: dict = {"primary_urls": 0, "fallback_urls": 0, "provider_path": "primary"}
-    urls = await discover_urls_primary(seed, country, sector, limit)
+    meta: dict = {
+        "primary_urls": 0,
+        "fallback_urls": 0,
+        "provider_path": "primary",
+        "ddgs_primary_backend": "",
+        "ddgs_fallback_backend": "",
+        "brand_guess_urls": 0,
+    }
+    urls, backend_p = await discover_urls_primary(seed, country, sector, limit)
     meta["primary_urls"] = len(urls)
+    meta["ddgs_primary_backend"] = backend_p
 
     if len(urls) < min(3, limit):
-        extra = await discover_urls_fallback(seed, country, sector, limit)
+        extra, backend_f = await discover_urls_fallback(seed, country, sector, limit)
         meta["fallback_urls"] = len(extra)
+        meta["ddgs_fallback_backend"] = backend_f
         seen = {u.rstrip("/").lower() for u in urls}
         for u in extra:
             k = u.rstrip("/").lower()
@@ -57,6 +66,27 @@ async def run_global_search(seed: str, country: str, sector: str, limit: int) ->
                 seen.add(k)
                 urls.append(u)
         meta["provider_path"] = "primary+fallback" if extra else "primary"
+
+    if not urls:
+        guessed = guess_brand_urls(seed, limit)
+        meta["brand_guess_urls"] = len(guessed)
+        urls = guessed
+        meta["provider_path"] = "brand_url_guess"
+    elif urls and len(urls) < limit:
+        guessed = guess_brand_urls(seed, limit)
+        seen = {u.rstrip("/").lower() for u in urls}
+        added = 0
+        for u in guessed:
+            k = u.rstrip("/").lower()
+            if k not in seen:
+                seen.add(k)
+                urls.append(u)
+                added += 1
+                if len(urls) >= limit:
+                    break
+        if added:
+            meta["brand_guess_urls"] = added
+            meta["provider_path"] = (meta.get("provider_path") or "primary") + "+brand_hint"
 
     urls = urls[:limit]
     sem = asyncio.Semaphore(max(1, min(8, int(settings.analyze_concurrency))))
