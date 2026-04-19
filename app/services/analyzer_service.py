@@ -1,9 +1,13 @@
+import logging
 import re
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
+from app.services.data_quality import normalize_lead_dict
 from app.services.http_client import get_with_retry
+
+logger = logging.getLogger(__name__)
 
 
 def _domain(url: str) -> str:
@@ -86,7 +90,7 @@ async def analyze_company(website: str) -> dict:
     elif d.endswith(".es"):
         country = "ES"
 
-    return {
+    raw = {
         "name": d.split(".")[0].replace("-", " ").title(),
         "domain": d,
         "website": website,
@@ -100,3 +104,16 @@ async def analyze_company(website: str) -> dict:
         "contact_phone": _extract_phone(text),
         "contact_page": contact_page,
     }
+    return normalize_lead_dict({**raw, "score": 0, "classification": "LOW"}, "")
+
+
+async def safe_analyze_company(website: str) -> dict | None:
+    """Analisi sito: non propaga eccezioni; None se ingestibile."""
+    try:
+        w = (website or "").strip()
+        if not w or len(w) > 500:
+            return None
+        return await analyze_company(w)
+    except Exception as exc:
+        logger.warning("safe_analyze_company failed: %s | %s", (website or "")[:120], str(exc)[:220])
+        return None

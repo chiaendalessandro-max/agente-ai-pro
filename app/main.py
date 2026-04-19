@@ -3,12 +3,14 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.api.router import router as api_router
+from app.core.config import settings
 from app.core.logger import setup_logging
 from app.core.database import engine
 from app.models import Base
@@ -52,7 +54,22 @@ async def shutdown() -> None:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "version": settings.app_version, "service": settings.app_name}
+
+
+@app.get("/ready")
+async def ready() -> JSONResponse:
+    """Readiness: database raggiungibile."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return JSONResponse(status_code=200, content={"status": "ready", "database": "ok"})
+    except Exception as exc:
+        logger.error("Readiness check failed: %s", str(exc)[:300])
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "database": "error", "detail": "Database unavailable"},
+        )
 
 
 @app.get("/")
@@ -81,6 +98,11 @@ async def app_page(page: str) -> FileResponse:
 
 @app.exception_handler(Exception)
 async def global_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+        if not isinstance(detail, str):
+            detail = str(detail)
+        return JSONResponse(status_code=exc.status_code, content={"detail": detail})
     logger.exception("Unhandled error: %s", str(exc)[:300])
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 

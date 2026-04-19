@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from app.schemas.email import EmailDraftOut
 from app.services.email_service import make_email, send_or_draft
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(apply_rate_limit)])
 
 
@@ -33,7 +36,7 @@ async def create_email(lead_id: int, user: User = Depends(get_current_user), db:
         .limit(1)
     )
     last_email = last_email_q.scalar_one_or_none()
-    if last_email and (last_email.status in {"sent", "draft", "queued"}):
+    if last_email and (last_email.status in {"sent", "draft"}):
         return EmailDraftOut(
             id=last_email.id,
             status=last_email.status,
@@ -45,17 +48,26 @@ async def create_email(lead_id: int, user: User = Depends(get_current_user), db:
     status, error = send_or_draft(lead.contact_email, subject, body)
     item = EmailQueue(lead_id=lead.id, subject=subject, body=body, status=status, error=error)
     db.add(item)
-    await db.commit()
-    await db.refresh(item)
+    try:
+        await db.commit()
+        await db.refresh(item)
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("create_email persist failed: %s", str(exc)[:250])
+        raise HTTPException(status_code=500, detail="Impossibile salvare l'email in coda.") from exc
     return EmailDraftOut(id=item.id, status=item.status, subject=item.subject, body=item.body, error=item.error)
 
 
 @router.get("")
 async def list_emails(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
-    result = await db.execute(
-        select(EmailQueue).join(Lead, EmailQueue.lead_id == Lead.id).where(Lead.user_id == user.id)
-    )
-    items = result.scalars().all()
+    try:
+        result = await db.execute(
+            select(EmailQueue).join(Lead, EmailQueue.lead_id == Lead.id).where(Lead.user_id == user.id)
+        )
+        items = result.scalars().all()
+    except Exception as exc:
+        logger.exception("list_emails failed: %s", str(exc)[:250])
+        return {"items": []}
     return {
         "items": [
             {

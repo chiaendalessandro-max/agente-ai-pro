@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import apply_rate_limit
@@ -21,8 +22,12 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)) -> d
         raise HTTPException(status_code=400, detail="Email already exists")
     user = User(email=payload.email.lower(), password_hash=hash_password(payload.password), company_name=payload.company_name)
     db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    try:
+        await db.commit()
+        await db.refresh(user)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Email already exists") from None
     return {"id": user.id, "email": user.email, "company_name": user.company_name}
 
 

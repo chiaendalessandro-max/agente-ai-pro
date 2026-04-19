@@ -9,12 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 def make_email(company: str, sector: str, description: str, score: int) -> tuple[str, str]:
+    desc = (description or "").strip()
     subject = f"Growth opportunity for {company}"
     body = (
         f"Hello {company} team,\n\n"
         f"We reviewed your position in {sector or 'your market'} and found strong fit signals.\n"
         f"Lead score: {score}/100.\n\n"
-        f"Public insight: {description[:220]}\n\n"
+        f"Public insight: {desc[:220]}\n\n"
         "Would you like a short 15-minute intro call?\n\n"
         "Best regards"
     )

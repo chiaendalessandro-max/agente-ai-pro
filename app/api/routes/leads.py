@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -10,10 +11,19 @@ from app.core.database import get_db
 from app.models.company import Company
 from app.models.lead import Lead
 from app.models.user import User
-from app.schemas.lead import AnalyzeCompanyIn, LeadItemOut, ScoreLeadIn, SearchGlobalIn
-from app.services.analyzer_service import analyze_company
-from app.services.lead_engine import search_global
+from app.schemas.lead import (
+    AnalyzeCompanyIn,
+    LeadItemOut,
+    LeadTemperatureIn,
+    ScoreLeadIn,
+    SearchGlobalIn,
+)
+from app.services.analyzer_service import safe_analyze_company
+from app.services.orchestrator_service import run_global_search
 from app.services.scoring_service import score_lead
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(dependencies=[Depends(apply_rate_limit)])
@@ -46,49 +56,65 @@ async def search_global_endpoint(
     if hit is not None:
         return hit
 
-    results = await search_global(payload.query, payload.country, payload.sector, payload.limit)
-    saved = 0
-    for item in results:
-        existing_company_q = await db.execute(select(Company).where(Company.domain == item["domain"]))
-        company = existing_company_q.scalar_one_or_none()
-        if not company:
-            company = Company(
-                domain=item["domain"],
-                name=item["name"],
-                website=item["website"],
-                country=item["country"],
-                sector=item["sector"],
-                size_estimate=item["size_estimate"],
-                description=item["description"],
-                international_presence=item["international_presence"],
-                value_signals=item["value_signals"],
-            )
-            db.add(company)
-            await db.flush()
+    try:
+        packed = await run_global_search(payload.query, payload.country, payload.sector, payload.limit)
+        results = list(packed.get("results") or [])
+        meta = packed.get("meta") or {}
+    except Exception as exc:
+        logger.exception("search_global orchestration failed: %s", str(exc)[:300])
+        raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile. Riprovare.") from exc
 
-        lead_q = await db.execute(select(Lead).where(Lead.user_id == user.id, Lead.company_id == company.id))
-        lead = lead_q.scalar_one_or_none()
-        if not lead:
-            lead = Lead(
-                user_id=user.id,
-                company_id=company.id,
-                source_query=payload.query,
-                contact_email=item["contact_email"],
-                contact_phone=item["contact_phone"],
-                contact_page=item["contact_page"],
-                score=item["score"],
-                classification=item["classification"],
-            )
-            db.add(lead)
-            saved += 1
-        else:
-            lead.score = item["score"]
-            lead.classification = item["classification"]
-            lead.contact_email = item["contact_email"]
-            lead.contact_phone = item["contact_phone"]
-            lead.contact_page = item["contact_page"]
-    await db.commit()
-    out = {"saved": saved, "results": results}
+    saved = 0
+    try:
+        for item in results:
+            domain = (item.get("domain") or "").strip()
+            if not domain:
+                continue
+            existing_company_q = await db.execute(select(Company).where(Company.domain == domain))
+            company = existing_company_q.scalar_one_or_none()
+            if not company:
+                company = Company(
+                    domain=domain,
+                    name=item.get("name") or domain,
+                    website=item.get("website") or f"https://{domain}/",
+                    country=item.get("country") or "GLOBAL",
+                    sector=item.get("sector") or "General",
+                    size_estimate=item.get("size_estimate") or "SMB",
+                    description=item.get("description") or "",
+                    international_presence=int(item.get("international_presence") or 0),
+                    value_signals=item.get("value_signals") or "",
+                )
+                db.add(company)
+                await db.flush()
+
+            lead_q = await db.execute(select(Lead).where(Lead.user_id == user.id, Lead.company_id == company.id))
+            lead = lead_q.scalar_one_or_none()
+            if not lead:
+                lead = Lead(
+                    user_id=user.id,
+                    company_id=company.id,
+                    source_query=payload.query,
+                    contact_email=item.get("contact_email") or "",
+                    contact_phone=item.get("contact_phone") or "",
+                    contact_page=item.get("contact_page") or "",
+                    score=int(item.get("score") or 0),
+                    classification=item.get("classification") or "LOW",
+                )
+                db.add(lead)
+                saved += 1
+            else:
+                lead.score = int(item.get("score") or 0)
+                lead.classification = item.get("classification") or lead.classification
+                lead.contact_email = item.get("contact_email") or lead.contact_email
+                lead.contact_phone = item.get("contact_phone") or lead.contact_phone
+                lead.contact_page = item.get("contact_page") or lead.contact_page
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("search_global persist failed: %s", str(exc)[:300])
+        raise HTTPException(status_code=500, detail="Errore durante il salvataggio dei lead.") from exc
+
+    out = {"saved": saved, "results": results, "meta": meta}
     cache.set(cache_key, out)
     return out
 
@@ -98,17 +124,21 @@ async def analyze_company_endpoint(
     payload: AnalyzeCompanyIn, user: User = Depends(get_current_user)
 ) -> dict:
     _ = user
-    try:
-        return await analyze_company(payload.website)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)[:300])
+    data = await safe_analyze_company(payload.website)
+    if not data:
+        raise HTTPException(status_code=422, detail="Impossibile analizzare il sito indicato (timeout o URL non valido).")
+    return data
 
 
 @router.post("/score-lead")
 async def score_lead_endpoint(payload: ScoreLeadIn, user: User = Depends(get_current_user)) -> dict:
     _ = user
-    score, classification = score_lead(payload.model_dump())
-    return {"score": score, "classification": classification}
+    try:
+        score, classification = score_lead(payload.model_dump())
+        return {"score": score, "classification": classification}
+    except Exception as exc:
+        logger.warning("score_lead failed: %s", str(exc)[:200])
+        raise HTTPException(status_code=422, detail="Input non valido per lo scoring") from exc
 
 
 @router.get("/leads", response_model=list[LeadItemOut])
@@ -185,13 +215,11 @@ async def lead_detail(lead_id: int, user: User = Depends(get_current_user), db: 
 @router.patch("/leads/{lead_id}/temperature")
 async def set_lead_temperature(
     lead_id: int,
-    payload: dict,
+    payload: LeadTemperatureIn,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    value = str(payload.get("temperature", "")).upper()
-    if value not in {"HOT", "WARM", "COLD"}:
-        raise HTTPException(status_code=400, detail="temperature must be HOT/WARM/COLD")
+    value = payload.temperature
     result = await db.execute(select(Lead).where(Lead.id == lead_id, Lead.user_id == user.id))
     lead = result.scalar_one_or_none()
     if not lead:
