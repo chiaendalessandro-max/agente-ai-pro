@@ -3,7 +3,9 @@ services:
     name: agente-ai-pro
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Gunicorn master apre la porta in modo affidabile su Render; worker ASGI = Uvicorn.
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile -
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.6
@@ -15,3 +17,4 @@ services:
         generateValue: true
       - key: SMTP_ENABLED
         value: "false"
+
