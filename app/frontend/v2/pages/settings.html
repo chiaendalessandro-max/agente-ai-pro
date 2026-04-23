@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Impostazioni Premium</title>
+  <link rel="stylesheet" href="/static/premium.css" />
+  <script src="/static/premium.js"></script>
+</head>
+<body>
+<div class="shell" id="app"></div>
+<script>
+  if (!requireAuthPremium()) {}
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${topbar("settings")}
+    <main class="wrap" style="padding-bottom:42px;">
+      <h2 class="section-title">Impostazioni</h2>
+      <div class="panel">
+        <p class="muted">Area account e preferenze piattaforma.</p>
+        <div style="margin-top:14px;">
+          <button class="btn btn-secondary" onclick="logoutPremium()">Disconnetti</button>
+        </div>
+      </div>
+    </main>`;
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard Premium</title>
+  <link rel="stylesheet" href="/static/premium.css" />
+  <script src="/static/premium.js"></script>
+</head>
+<body>
+<div class="shell" id="app"></div>
+<script>
+  if (!requireAuthPremium()) {}
+
+  (async function () {
+    const app = document.getElementById("app");
+    try {
+      const kpi = await apiPremium("/kpi");
+      app.innerHTML = `
+        ${topbar("dashboard")}
+        <main class="wrap" style="padding-bottom:42px;">
+          <section class="hero">
+            <img src="/static/images/jet-fly.png" alt="Jet premium" />
+            <div class="hero-content">
+              <div>
+                <h1>Trova clienti ad alto valore in pochi secondi</h1>
+                <p>Una piattaforma essenziale per scoprire aziende premium e trasformarle in lead qualificati.</p>
+                <div style="margin-top:20px;">
+                  <a href="/app/search"><button class="btn btn-primary">Inizia ricerca</button></a>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid kpi">
+            <div class="panel">
+              <div class="kpi-title">Lead trovati</div>
+              <div class="kpi-value">${kpi.total_leads || 0}</div>
+            </div>
+            <div class="panel">
+              <div class="kpi-title">Lead salvati</div>
+              <div class="kpi-value">${kpi.total_leads || 0}</div>
+            </div>
+            <div class="panel">
+              <div class="kpi-title">High Value</div>
+              <div class="kpi-value">${kpi.high_value || 0}</div>
+            </div>
+          </section>
+
+          <h3 class="section-title">Ultime attività</h3>
+          <section class="panel">
+            ${(kpi.recent_activity || []).slice(0, 6).map(a => `
+              <div class="lead-row">
+                <div>${a.type}</div>
+                <div class="muted">${a.value}</div>
+                <div></div><div></div><div></div>
+              </div>
+            `).join("") || '<div class="muted">Nessuna attività recente.</div>'}
+          </section>
+        </main>`;
+    } catch (e) {
+      logoutPremium();
+    }
+  })();
+</script>
+</body>
+</html>

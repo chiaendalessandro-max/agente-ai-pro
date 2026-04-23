@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ricerca Premium</title>
+  <link rel="stylesheet" href="/static/premium.css" />
+  <script src="/static/premium.js"></script>
+</head>
+<body>
+<div class="shell" id="app"></div>
+<script>
+  if (!requireAuthPremium()) {}
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${topbar("search")}
+    <main class="wrap" style="padding-bottom:42px;">
+      <section class="hero" style="margin-top:22px;">
+        <img src="/static/images/jet-cabin.png" alt="Jet cabin" />
+        <div class="hero-content">
+          <div>
+            <h1>Trova aziende strategiche</h1>
+            <p>Ricerca intelligente in un flusso semplice, pulito e immediato.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="search-shell">
+        <div class="search-box">
+          <form id="f">
+            <input id="q" class="input" placeholder="Cerca aziende ad alto valore..." required />
+            <div class="filters">
+              <input id="country" class="input" placeholder="Paese" />
+              <input id="sector" class="input" placeholder="Settore" />
+              <input id="limit" class="input" type="number" min="1" max="50" value="10" />
+            </div>
+            <div style="margin-top:12px;">
+              <button class="btn btn-primary" style="min-width:160px;">Cerca</button>
+            </div>
+          </form>
+          <p id="status" class="muted" style="margin:12px 2px 0;">Inserisci la tua ricerca per iniziare.</p>
+        </div>
+      </section>
+
+      <section id="results" class="cards"></section>
+    </main>`;
+
+  document.getElementById("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const status = document.getElementById("status");
+    const results = document.getElementById("results");
+    status.textContent = "Ricerca in corso...";
+    results.innerHTML = "";
+    try {
+      const data = await apiPremium("/search-global", {
+        method: "POST",
+        body: JSON.stringify({
+          query: document.getElementById("q").value,
+          country: document.getElementById("country").value,
+          sector: document.getElementById("sector").value,
+          limit: Number(document.getElementById("limit").value || 10),
+          min_confidence: 0.28,
+        }),
+      });
+      const rows = data.results || [];
+      status.textContent = `Abbiamo trovato ${rows.length} aziende`;
+      if (!rows.length) {
+        results.innerHTML = `<div class="panel muted">Nessun risultato disponibile. Prova una ricerca diversa.</div>`;
+        return;
+      }
+      results.innerHTML = rows.map((r, idx) => `
+        <article class="company-card">
+          <div class="company-head">
+            <div>
+              <div class="company-name">${r.name || "Azienda"}</div>
+              <div class="meta">${r.country || "-"} · Score ${r.score || 0}</div>
+            </div>
+            <span class="badge ${classBadge(r.classification)}">${r.classification || "LOW"}</span>
+          </div>
+          <div style="margin-top:14px;">
+            <button class="btn btn-secondary save-btn" data-i="${idx}">Salva lead</button>
+          </div>
+        </article>
+      `).join("");
+      document.querySelectorAll(".save-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          btn.textContent = "Lead salvato";
+          btn.disabled = true;
+        });
+      });
+    } catch (err) {
+      status.textContent = "Ricerca non disponibile al momento.";
+      results.innerHTML = `<div class="panel muted">Si è verificato un errore.</div>`;
+    }
+  });
+</script>
+</body>
+</html>

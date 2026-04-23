@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lead Premium</title>
+  <link rel="stylesheet" href="/static/premium.css" />
+  <script src="/static/premium.js"></script>
+</head>
+<body>
+<div class="shell" id="app"></div>
+<script>
+  if (!requireAuthPremium()) {}
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${topbar("leads")}
+    <main class="wrap" style="padding-bottom:42px;">
+      <h2 class="section-title">Lead</h2>
+      <div class="panel">
+        <div class="lead-row muted" style="font-size:12px; text-transform:uppercase; letter-spacing:.6px;">
+          <div>Azienda</div><div>Paese</div><div>Score</div><div>Classificazione</div><div>Azione</div>
+        </div>
+        <div id="rows"></div>
+      </div>
+    </main>`;
+
+  async function loadLeads() {
+    const rows = document.getElementById("rows");
+    rows.innerHTML = `<div class="lead-row"><div class="muted">Caricamento...</div></div>`;
+    try {
+      const leads = await apiPremium("/leads?page=1&page_size=100");
+      rows.innerHTML = (leads || []).map((l) => `
+        <div class="lead-row">
+          <div><strong>${l.company_name}</strong></div>
+          <div class="muted">${l.country || "-"}</div>
+          <div>${l.score || 0}</div>
+          <div><span class="badge ${classBadge(l.classification)}">${l.classification || "LOW"}</span></div>
+          <div><a href="/app/company?id=${l.id}" class="btn btn-secondary" style="text-decoration:none;">Apri</a></div>
+        </div>
+      `).join("") || `<div class="lead-row"><div class="muted">Nessun lead disponibile.</div></div>`;
+    } catch {
+      rows.innerHTML = `<div class="lead-row"><div class="muted">Impossibile caricare i lead.</div></div>`;
+    }
+  }
+  loadLeads();
+</script>
+</body>
+</html>

@@ -39,6 +39,7 @@ app.add_middleware(
 )
 app.include_router(api_router)
 frontend_dir = Path(__file__).resolve().parent / "frontend"
+frontend_v2_dir = frontend_dir / "v2"
 app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
 
 _stop_event = asyncio.Event()
@@ -101,6 +102,11 @@ async def app_page(page: str) -> FileResponse:
     }
     if page not in allowed:
         page = "dashboard"
+    v2_pages = {"dashboard", "search", "leads", "emails", "settings"}
+    if page in v2_pages:
+        candidate = frontend_v2_dir / "pages" / f"{page}.html"
+        if candidate.exists():
+            return FileResponse(candidate)
     file_path = frontend_dir / "pages" / f"{page}.html"
     return FileResponse(file_path)
 

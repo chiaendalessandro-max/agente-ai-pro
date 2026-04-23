@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Email Premium</title>
+  <link rel="stylesheet" href="/static/premium.css" />
+  <script src="/static/premium.js"></script>
+</head>
+<body>
+<div class="shell" id="app"></div>
+<script>
+  if (!requireAuthPremium()) {}
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${topbar("emails")}
+    <main class="wrap" style="padding-bottom:42px;">
+      <h2 class="section-title">Email</h2>
+      <div class="panel">
+        <p class="muted">Gestione comunicazioni e attività email.</p>
+        <div id="rows" class="cards" style="margin-top:10px;"></div>
+      </div>
+    </main>`;
+
+  async function loadEmails() {
+    const rows = document.getElementById("rows");
+    rows.innerHTML = `<div class="muted">Caricamento...</div>`;
+    try {
+      const data = await apiPremium("/emails");
+      rows.innerHTML = (data.items || []).map((e) => `
+        <article class="company-card">
+          <div class="company-head">
+            <div class="company-name">Lead #${e.lead_id}</div>
+            <span class="badge low">${e.status || "draft"}</span>
+          </div>
+          <div class="meta">${e.subject || "Nessun oggetto"}</div>
+        </article>
+      `).join("") || `<div class="muted">Nessuna email disponibile.</div>`;
+    } catch {
+      rows.innerHTML = `<div class="muted">Impossibile caricare le email.</div>`;
+    }
+  }
+  loadEmails();
+</script>
+</body>
+</html>
