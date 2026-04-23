@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -19,8 +20,8 @@ from app.schemas.lead import (
     SearchGlobalIn,
 )
 from app.services.analyzer_service import safe_analyze_company
-from app.services.orchestrator_service import run_global_search
 from app.services.scoring_service import score_lead
+from company_search_real import search_companies_real
 
 
 logger = logging.getLogger(__name__)
@@ -57,15 +58,19 @@ async def search_global_endpoint(
         return hit
 
     try:
-        packed = await run_global_search(
-            payload.query,
+        effective_sector = payload.sector or payload.query
+        results = await asyncio.to_thread(
+            search_companies_real,
+            effective_sector,
             payload.country,
-            payload.sector,
             payload.limit,
-            min_confidence=payload.min_confidence,
         )
-        results = list(packed.get("results") or [])
-        meta = packed.get("meta") or {}
+        meta = {
+            "provider_path": "real_scraping",
+            "results_returned": len(results),
+            "country_resolved": payload.country,
+            "confidence_threshold": payload.min_confidence,
+        }
     except Exception as exc:
         logger.exception("search_global orchestration failed: %s", str(exc)[:300])
         raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile. Riprovare.") from exc

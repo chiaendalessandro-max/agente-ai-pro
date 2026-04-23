@@ -1,3 +1,5 @@
+import subprocess
+import sys
 import asyncio
 import logging
 import os
@@ -15,6 +17,13 @@ from app.core.logger import setup_logging
 from app.core.database import engine
 from app.models import Base
 from app.services.scheduler_service import scheduler_loop
+
+# Avvia Ollama in background automaticamente
+subprocess.Popen(
+    [sys.executable, "start_with_ai.py"],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL
+)
 
 
 setup_logging()
