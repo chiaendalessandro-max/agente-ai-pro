@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from app.core.config import settings
-from app.services.ai_providers import collect_search_urls, guess_brand_urls
+from app.services.ai_providers import collect_search_urls
 from app.services.analyzer_service import safe_analyze_company
 from app.services.confidence_score import compute_lead_confidence
 from app.services.country_context import resolve_country
@@ -76,8 +76,8 @@ async def run_global_search(
     min_confidence = max(0.08, min(0.95, float(min_confidence)))
     ctx = resolve_country(country)
 
-    hard_cap = min(140, max(limit * 10, 45))
-    min_urls = max(limit * 4, 24)
+    hard_cap = min(220, max(limit * 16, 96))
+    min_urls = max(limit * 8, 48)
 
     meta: dict = {
         "country_resolved": ctx.iso2 if ctx else None,
@@ -86,6 +86,8 @@ async def run_global_search(
         "analyzed_ok": 0,
         "confidence_threshold": min_confidence,
         "brand_guess_urls": 0,
+        "country_filtered_out": 0,
+        "confidence_filtered_out": 0,
     }
 
     url_sources: dict[str, str] = {}
@@ -106,10 +108,19 @@ async def run_global_search(
         )
         urls = _merge_urls(urls, u2, url_sources, "expanded")
 
-    if len(urls) < max(limit, 8):
-        guessed = guess_brand_urls(seed, min(6, limit))
-        meta["brand_guess_urls"] = len(guessed)
-        urls = _merge_urls(urls, guessed, url_sources, "brand_guess")
+    if len(urls) < min_urls:
+        u3, d3 = await collect_search_urls(
+            seed,
+            sector,
+            ctx,
+            min_urls=max(8, limit * 2),
+            hard_cap=hard_cap,
+            relaxed=True,
+        )
+        meta["discovery_passes"].append(
+            {"phase": "fallback", **{k: d3[k] for k in ("queries_run", "ddgs_raw_hits", "unique_urls", "backend_last", "region") if k in d3}}
+        )
+        urls = _merge_urls(urls, u3, url_sources, "fallback")
 
     urls = urls[:hard_cap]
     meta["urls_before_analyze"] = len(urls)
@@ -141,6 +152,13 @@ async def run_global_search(
     for lead in raw_leads:
         dom = normalize_domain(lead.get("domain") or lead.get("website") or "")
         src = url_sources.get(dom, "ddgs")
+        lead_country = str(lead.get("country") or "").upper()
+        if filt_iso and lead_country and lead_country != filt_iso:
+            meta["country_filtered_out"] += 1
+            continue
+        if lead_country in {"", "GLOBAL"} and filt_iso:
+            meta["country_filtered_out"] += 1
+            continue
         conf = compute_lead_confidence(lead, country_ctx=ctx, discovery_source=src)
         lead["confidence"] = conf
         lead["discovery_source"] = src
@@ -148,9 +166,10 @@ async def run_global_search(
 
     threshold = min_confidence
     passing = [L for L in enriched if float(L.get("confidence") or 0) >= threshold]
+    meta["confidence_filtered_out"] = max(0, len(enriched) - len(passing))
     eff = threshold
     if len(passing) < limit:
-        lowered = max(0.1, min_confidence * 0.52)
+        lowered = max(0.18, min_confidence * 0.72)
         passing2 = [L for L in enriched if float(L.get("confidence") or 0) >= lowered]
         if len(passing2) > len(passing):
             passing = passing2
@@ -158,11 +177,13 @@ async def run_global_search(
     meta["confidence_threshold_effective"] = eff
 
     if not passing:
-        passing = sorted(enriched, key=lambda x: float(x.get("confidence") or 0), reverse=True)[: max(1, min(3, limit))]
+        passing = sorted(enriched, key=lambda x: float(x.get("confidence") or 0), reverse=True)[: max(1, min(6, limit))]
 
     passing = dedupe_leads_by_domain(passing)
     passing.sort(key=lambda x: float(x.get("confidence") or 0) * (1 + int(x.get("score") or 0) / 100.0), reverse=True)
-    results = passing[:limit]
+    results = passing[: max(limit, min(12, len(passing)))]
+    if len(results) > limit:
+        results = results[:limit]
 
     meta["results_returned"] = len(results)
     meta["provider_path"] = ">".join(p.get("phase", "?") for p in meta["discovery_passes"]) or "discovery"
