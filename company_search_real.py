@@ -337,4 +337,10 @@ def search_companies_real(sector: str, country: str, num_results: int = 10) -> l
     for i, c in enumerate(final):
         logger.info("  [%02d] %-40s | %s", i + 1, c["name"], c["website"])
     logger.info("========================================")
+    # Analisi AI e arricchimento dati
+    try:
+        from ai_data_analysis import analizza_risultati_ricerca
+        final = analizza_risultati_ricerca(final, sector, country)
+    except Exception as e:
+        logger.warning(f"[AI] Analisi AI non disponibile: {e}")
     return final
