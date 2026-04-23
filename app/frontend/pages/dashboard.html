@@ -15,29 +15,38 @@
     try {
       const kpi = await api('/kpi');
       const html = `
-        <div class="grid md:grid-cols-3 gap-4 mb-6">
-          <div class="card p-4"><div class="text-xs text-slate-400">Lead Totali</div><div class="text-3xl font-bold">${kpi.total_leads}</div></div>
-          <div class="card p-4"><div class="text-xs text-slate-400">Lead HIGH VALUE</div><div class="text-3xl font-bold text-emerald-400">${kpi.high_value}</div></div>
-          <div class="card p-4"><div class="text-xs text-slate-400">Email in coda</div><div class="text-3xl font-bold text-blue-400">${kpi.queued_emails}</div></div>
-        </div>
-        <div class="grid md:grid-cols-2 gap-4">
-          <div class="card p-4">
-            <h3 class="font-semibold mb-3">Onboarding guidato</h3>
-            ${(kpi.next_actions||[]).map(a=>`<div class="text-sm py-2 border-b border-slate-800">${a}</div>`).join("")}
-            <div class="mt-3 flex gap-2">
-              <a href="/app/search" class="btn btn-primary text-sm">Avvia ricerca</a>
-              <a href="/app/leads" class="btn btn-ghost text-sm">Apri lead</a>
-            </div>
+        <section class="mb-8">
+          <h2 class="text-3xl font-semibold text-slate-900">Dashboard</h2>
+          <p class="text-slate-500 mt-1">Panoramica rapida del tuo lavoro.</p>
+        </section>
+
+        <section class="grid md:grid-cols-2 gap-4 mb-6">
+          <div class="card p-6">
+            <div class="text-sm text-slate-500">Lead trovati</div>
+            <div class="text-4xl font-semibold mt-2">${kpi.total_leads}</div>
           </div>
-          <div class="card p-4">
-            <h3 class="font-semibold mb-3">Attività recenti</h3>
-            ${(kpi.recent_activity||[]).map(a=>`<div class="text-sm py-2 border-b border-slate-800">${a.type}: <b>${a.value}</b></div>`).join("")}
+          <div class="card p-6">
+            <div class="text-sm text-slate-500">Lead salvati</div>
+            <div class="text-4xl font-semibold mt-2">${kpi.total_leads}</div>
           </div>
-          <div class="card p-4">
-            <h3 class="font-semibold mb-3">Suggerimenti aziende</h3>
-            ${(kpi.suggestions||[]).map(s=>`<div class="text-sm py-2 border-b border-slate-800">${s.company_name} · Lead #${s.lead_id} · Score ${s.score} · ${s.classification} · ${s.hint}</div>`).join("")}
+        </section>
+
+        <section class="card p-6 mb-6">
+          <h3 class="text-lg font-semibold mb-4">Inizia una nuova ricerca</h3>
+          <a href="/app/search" class="btn btn-primary inline-flex text-base px-8 py-3">Avvia nuova ricerca</a>
+        </section>
+
+        <section class="card p-6">
+          <h3 class="text-lg font-semibold mb-4">Ultime attività</h3>
+          <div class="space-y-3">
+            ${(kpi.recent_activity||[]).slice(0,6).map(a=>`
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span class="text-slate-700">${a.type}</span>
+                <span class="text-slate-500 text-sm">${a.value}</span>
+              </div>
+            `).join("") || '<p class="text-slate-500">Nessuna attività recente.</p>'}
           </div>
-        </div>`;
+        </section>`;
       document.getElementById('app').innerHTML = appLayout('dashboard', html);
     } catch (e) {
       clearSession(); navTo('/app/login');

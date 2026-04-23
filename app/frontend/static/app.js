@@ -86,24 +86,24 @@ function temperatureBadge(temp) {
 function appLayout(active, contentHtml) {
   return `
   <div class="page-shell">
-    <header class="border-b border-slate-800 bg-slate-950/70 backdrop-blur">
-      <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
+    <header class="border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
         <div>
-          <h1 class="text-2xl font-bold">Agente AI Pro</h1>
-          <p class="text-xs text-slate-400">AI Lead Generation CRM</p>
+          <h1 class="text-xl font-semibold text-slate-900">Agente AI Pro</h1>
+          <p class="text-xs text-slate-500">Piattaforma SaaS per lead generation</p>
         </div>
         <div class="flex gap-2">
-          <button class="btn btn-ghost" onclick="clearSession();navTo('/app/login')">Logout</button>
+          <button class="btn btn-ghost" onclick="clearSession();navTo('/app/login')">Esci</button>
         </div>
       </div>
-      <nav class="max-w-7xl mx-auto px-4 pb-4 flex flex-wrap gap-2 text-sm">
+      <nav class="max-w-6xl mx-auto px-4 pb-4 flex flex-wrap gap-2 text-sm">
         ${[
           ["dashboard","Dashboard"],["search","Ricerca"],["leads","Lead"],["emails","Email"],["settings","Impostazioni"]
         ].map(([key,label]) =>
-          `<a href="/app/${key}" class="px-3 py-2 rounded-lg border ${active===key?'bg-blue-600 border-blue-600':'border-slate-700 hover:bg-slate-800'}">${label}</a>`
+          `<a href="/app/${key}" class="px-3 py-2 rounded-lg border transition ${active===key?'bg-slate-900 border-slate-900 text-white':'border-slate-200 text-slate-700 hover:bg-slate-100'}">${label}</a>`
         ).join("")}
       </nav>
     </header>
-    <main class="max-w-7xl mx-auto px-4 py-6">${contentHtml}</main>
+    <main class="max-w-6xl mx-auto px-4 py-8">${contentHtml}</main>
   </div>`;
 }
