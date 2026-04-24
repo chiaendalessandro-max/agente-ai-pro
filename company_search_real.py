@@ -199,6 +199,7 @@ def extract_company_info(raw: dict, sector: str, country: str) -> dict:
         website = f"https://{website.lstrip('/')}"
     desc = (raw.get("description") or "").strip()
     domain = _norm_domain(website)
+    source_url = website
     if domain:
         website = f"https://{domain}/"
     if (len(name) > 65 or " - " in name or "|" in name or "..." in name or "…" in name) and domain:
@@ -207,6 +208,7 @@ def extract_company_info(raw: dict, sector: str, country: str) -> dict:
         "name": name,
         "domain": domain,
         "website": website,
+        "source_url": source_url,
         "country": country,
         "sector": sector,
         "description": desc[:320],
@@ -255,7 +257,10 @@ def _sector_relevant(company: dict, sector: str) -> bool:
 def is_valid_company(company: dict, sector: str, country: str, tld: str) -> bool:
     name = (company.get("name") or "").strip().lower()
     url = (company.get("website") or "").strip().lower()
+    source_url = (company.get("source_url") or "").strip().lower()
     if not name or len(name) < 3 or not url.startswith("http"):
+        return False
+    if not source_url.startswith("http"):
         return False
     if any(b in url for b in BLACKLIST_DOMAINS):
         return False
@@ -270,6 +275,14 @@ def is_valid_company(company: dict, sector: str, country: str, tld: str) -> bool
     if tld and not _country_match(url, company.get("description", ""), country, tld):
         return False
     return True
+
+
+def _assign_classification(score: float) -> str:
+    if score >= 0.72:
+        return "HIGH VALUE"
+    if score >= 0.48:
+        return "MEDIUM"
+    return "LOW"
 
 
 def deduplicate(companies: list[dict]) -> list[dict]:
@@ -351,6 +364,10 @@ def search_companies_real(sector: str, country: str, num_results: int = 10) -> l
             clean = validated + clean[len(validated):]
 
     clean.sort(key=lambda x: float(x.get("quality_score") or 0), reverse=True)
+    for item in clean:
+        qs = float(item.get("quality_score") or 0.0)
+        item["score"] = max(1, min(100, int(round(qs * 100))))
+        item["classification"] = _assign_classification(qs)
     final = clean[:num_results]
 
     if len(final) < num_results:
@@ -360,17 +377,24 @@ def search_companies_real(sector: str, country: str, num_results: int = 10) -> l
         for b in backup:
             if b.get("domain") in dom:
                 continue
+            qs = _quality_score(b, country, tld)
+            b["quality_score"] = qs
+            b["score"] = max(1, min(100, int(round(qs * 100))))
+            b["classification"] = _assign_classification(qs)
             final.append(b)
             dom.add(b.get("domain"))
             if len(final) >= num_results:
                 break
 
-    try:
-        final = analizza_risultati_ricerca(final, sector, country)
-    except Exception as e:
-        logger.warning("[ANALISI] fallback senza NLP: %s", str(e)[:180])
+    if final:
+        try:
+            final = analizza_risultati_ricerca(final, sector, country)
+        except Exception as e:
+            logger.warning("[ANALISI] fallback senza NLP: %s", str(e)[:180])
+    else:
+        logger.warning("[RICERCA] nessun dato reale verificabile, AI processing saltato")
 
-    if use_ai:
+    if use_ai and final:
         for company in final[: min(12, len(final))]:
             try:
                 extra = ai_enrich_company(company.get("name", ""), company.get("description", ""), sector)
