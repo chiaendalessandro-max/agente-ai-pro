@@ -14,6 +14,7 @@ from app.models.lead import Lead
 from app.models.user import User
 from app.schemas.lead import (
     AnalyzeCompanyIn,
+    CompanySearchIn,
     LeadItemOut,
     LeadTemperatureIn,
     ScoreLeadIn,
@@ -128,6 +129,45 @@ async def search_global_endpoint(
     out = {"saved": saved, "results": results, "meta": meta}
     cache.set(cache_key, out)
     return out
+
+
+@router.post("/api/v1/company-search")
+async def company_search_endpoint(
+    payload: CompanySearchIn,
+    user: User = Depends(get_current_user),
+) -> dict:
+    _ = user
+    try:
+        results = await asyncio.to_thread(
+            search_companies_real,
+            payload.query,
+            payload.country,
+            payload.limit,
+        )
+    except Exception as exc:
+        logger.exception("company_search failed: %s", str(exc)[:300])
+        raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile.") from exc
+
+    cleaned = []
+    for item in results:
+        if not item.get("name"):
+            continue
+        if not (item.get("website") or item.get("source_url")):
+            continue
+        if payload.country and (item.get("country") or "").upper() == "GLOBAL":
+            continue
+        cleaned.append(
+            {
+                "company_name": item.get("name"),
+                "website": item.get("website"),
+                "source_url": item.get("source_url") or item.get("website"),
+                "country": item.get("country"),
+                "classification": item.get("classification", "LOW"),
+                "contact_email": item.get("contact_email", ""),
+                "contact_phone": item.get("contact_phone", ""),
+            }
+        )
+    return {"results": cleaned[: payload.limit], "count": len(cleaned[: payload.limit])}
 
 
 @router.post("/analyze-company")

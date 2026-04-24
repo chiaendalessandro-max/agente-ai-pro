@@ -302,6 +302,31 @@ def deduplicate(companies: list[dict]) -> list[dict]:
     return out
 
 
+def _extract_contacts_from_site(website: str) -> tuple[str, str]:
+    email = ""
+    phone = ""
+    try:
+        html = _request(website, timeout=8)
+        text = BeautifulSoup(html, "lxml").get_text(" ", strip=True)[:22000]
+        em = re.findall(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", text, flags=re.I)
+        ph = re.findall(r"(\+?\d[\d\s().-]{7,}\d)", text)
+        email = em[0].lower() if em else ""
+        phone = ph[0].strip() if ph else ""
+        if email and any(x in email for x in ("noreply", "example.com", "invalid")):
+            email = ""
+    except Exception:
+        return "", ""
+    return email, phone
+
+
+def _is_reachable_source(source_url: str) -> bool:
+    try:
+        r = _SESSION.get(source_url, headers=HEADERS, timeout=8, allow_redirects=True)
+        return 200 <= r.status_code < 400
+    except Exception:
+        return False
+
+
 def _collect_from_queries(queries: list[str], region: str, target_raw: int, use_sleep: float) -> list[dict]:
     all_raw: list[dict] = []
     for i, query in enumerate(queries):
@@ -316,7 +341,7 @@ def _collect_from_queries(queries: list[str], region: str, target_raw: int, use_
 
 
 def search_companies_real(sector: str, country: str, num_results: int = 10) -> list[dict]:
-    num_results = max(1, min(50, int(num_results or 10)))
+    num_results = max(5, min(20, int(num_results or 10)))
     logger.info("[RICERCA] avvio settore=%r paese=%r target=%s", sector, country, num_results)
     ensure_local_dependencies()
     use_ai = is_ollama_available()
@@ -333,6 +358,7 @@ def search_companies_real(sector: str, country: str, num_results: int = 10) -> l
     base_queries = build_queries(sector, country, relaxed=False)
     if use_ai:
         base_queries.extend(ai_expand_search_queries(sector, country))
+    logger.info("[DEBUG] query_generate=%s", len(base_queries))
     raw_target = max(num_results * 9, 80)
     all_raw.extend(_collect_from_queries(base_queries, region, raw_target, 0.35))
 
@@ -344,14 +370,23 @@ def search_companies_real(sector: str, country: str, num_results: int = 10) -> l
 
     logger.info("[RICERCA] raw raccolti=%s", len(all_raw))
     clean = []
+    discarded = 0
     for raw in all_raw:
         c = extract_company_info(raw, sector, country)
-        if is_valid_company(c, sector, country, tld):
-            c["quality_score"] = _quality_score(c, country, tld)
-            if _sector_relevant(c, sector):
-                clean.append(c)
+        if not is_valid_company(c, sector, country, tld):
+            discarded += 1
+            continue
+        if not _is_reachable_source(c.get("source_url", "")):
+            discarded += 1
+            continue
+        c["quality_score"] = _quality_score(c, country, tld)
+        if _sector_relevant(c, sector):
+            clean.append(c)
+        else:
+            discarded += 1
 
     clean = deduplicate(clean)
+    logger.info("[DEBUG] risultati_trovati=%s risultati_scartati=%s", len(clean), discarded)
     if use_ai and len(clean) >= num_results:
         validated = []
         for item in clean[: max(num_results * 3, 24)]:
@@ -402,6 +437,14 @@ def search_companies_real(sector: str, country: str, num_results: int = 10) -> l
                     company.update(extra)
             except Exception:
                 continue
+
+    for company in final:
+        if not company.get("contact_email") and not company.get("contact_phone"):
+            em, ph = _extract_contacts_from_site(company.get("website", ""))
+            if em:
+                company["contact_email"] = em
+            if ph:
+                company["contact_phone"] = ph
 
     for i, c in enumerate(final[:num_results], start=1):
         logger.info("[RISULTATO %02d] %s | %s | q=%.2f", i, c.get("name"), c.get("website"), float(c.get("quality_score") or 0))
