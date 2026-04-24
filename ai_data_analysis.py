@@ -2,8 +2,41 @@ import logging
 import json
 import os
 import re
+import importlib
+import subprocess
+import sys
 
 logger = logging.getLogger(__name__)
+_NLP = None
+_SENTENCE_MODEL = None
+
+
+def ensure_local_dependencies() -> dict:
+    needed = {
+        "spacy": "spacy",
+        "sentence_transformers": "sentence-transformers",
+        "sklearn": "scikit-learn",
+    }
+    out = {"installed": [], "failed": []}
+    for mod, pkg in needed.items():
+        try:
+            importlib.import_module(mod)
+        except Exception:
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "install", pkg], check=True, capture_output=True)
+                out["installed"].append(pkg)
+            except Exception:
+                out["failed"].append(pkg)
+    try:
+        import spacy
+        try:
+            spacy.load("it_core_news_sm")
+        except Exception:
+            subprocess.run([sys.executable, "-m", "spacy", "download", "it_core_news_sm"], check=True, capture_output=True)
+            out["installed"].append("it_core_news_sm")
+    except Exception:
+        pass
+    return out
 
 
 def get_modello():
@@ -25,6 +58,7 @@ def ollama_disponibile():
 
 def spacy_disponibile():
     try:
+        ensure_local_dependencies()
         import spacy
         spacy.load("it_core_news_sm")
         return True
@@ -43,7 +77,10 @@ def estrai_aziende_da_testo(testo: str) -> list:
         return []
     try:
         import spacy
-        nlp = spacy.load("it_core_news_sm")
+        global _NLP
+        if _NLP is None:
+            _NLP = spacy.load("it_core_news_sm")
+        nlp = _NLP
         doc = nlp(testo[:5000])
         aziende = list(set([
             ent.text.strip()
@@ -68,11 +105,14 @@ def deduplica_intelligente(aziende: list, soglia: float = 0.85) -> list:
     if len(aziende) <= 1:
         return aziende
     try:
+        ensure_local_dependencies()
         from sentence_transformers import SentenceTransformer
         from sklearn.metrics.pairwise import cosine_similarity
-        import numpy as np
 
-        model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        global _SENTENCE_MODEL
+        if _SENTENCE_MODEL is None:
+            _SENTENCE_MODEL = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        model = _SENTENCE_MODEL
         nomi = [a.get("name", a) if isinstance(a, dict) else a for a in aziende]
         embeddings = model.encode(nomi)
         similarity_matrix = cosine_similarity(embeddings)
@@ -103,9 +143,9 @@ def classifica_per_rilevanza(aziende: list, sector: str, country: str) -> list:
     if not aziende:
         return aziende
     try:
+        ensure_local_dependencies()
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.metrics.pairwise import cosine_similarity
-        import numpy as np
 
         query = f"{sector} {country} azienda professionale"
         testi = [
@@ -189,6 +229,11 @@ def analizza_risultati_ricerca(aziende: list, sector: str, country: str) -> list
     4. Arricchisci top 10 con Ollama
     """
     logger.info(f"[ANALISI] Avvio pipeline analisi su {len(aziende)} aziende")
+    dep = ensure_local_dependencies()
+    if dep["installed"]:
+        logger.info("[ANALISI] Dipendenze installate: %s", ", ".join(dep["installed"]))
+    if dep["failed"]:
+        logger.warning("[ANALISI] Dipendenze non installate: %s", ", ".join(dep["failed"]))
 
     aziende = deduplica_intelligente(aziende)
     aziende = classifica_per_rilevanza(aziende, sector, country)
