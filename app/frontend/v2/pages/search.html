@@ -34,6 +34,12 @@
               <input id="sector" class="input" placeholder="Settore" />
               <input id="limit" class="input" type="number" min="1" max="50" value="10" />
             </div>
+            <div style="margin-top:10px;">
+              <label style="display:inline-flex;align-items:center;gap:8px;color:#c8d2e2;font-size:14px;">
+                <input id="premiumMode" type="checkbox" />
+                Ricerca Premium
+              </label>
+            </div>
             <div style="margin-top:12px;">
               <button class="btn btn-primary" style="min-width:160px;">Cerca</button>
             </div>
@@ -49,17 +55,16 @@
     e.preventDefault();
     const status = document.getElementById("status");
     const results = document.getElementById("results");
+    const isPremium = document.getElementById("premiumMode").checked;
     status.textContent = "Stiamo analizzando aziende...";
     results.innerHTML = "";
     try {
-      const data = await apiPremium("/search-global", {
+      const data = await apiPremium(`/api/v1/company-search?mode=${isPremium ? "premium" : "normal"}`, {
         method: "POST",
         body: JSON.stringify({
           query: document.getElementById("q").value,
           country: document.getElementById("country").value,
-          sector: document.getElementById("sector").value,
           limit: Number(document.getElementById("limit").value || 10),
-          min_confidence: 0.28,
         }),
       });
       const rows = data.results || [];
@@ -72,11 +77,12 @@
         <article class="company-card">
           <div class="company-head">
             <div>
-              <div class="company-name">${r.name || "Azienda"}</div>
-              <div class="meta">${r.country || "-"} · Score ${r.score || 0}</div>
+              <div class="company-name">${r.company_name || "Azienda"}</div>
+              <div class="meta">${r.country || "-"} · Score ${r.score || "LOW"} · Probabilità ${r.client_probability || "LOW"}</div>
             </div>
-            <span class="badge ${classBadge(r.classification)}">${r.classification || "LOW"}</span>
+            <span class="badge ${classBadge(r.score || r.classification)}">${r.score || "LOW"}</span>
           </div>
+          <div class="meta" style="margin-top:8px;">${r.why_this_company || ""}</div>
           <div style="margin-top:14px;">
             <button class="btn btn-secondary save-btn" data-i="${idx}">Salva lead</button>
           </div>

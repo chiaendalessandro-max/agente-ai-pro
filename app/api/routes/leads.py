@@ -47,6 +47,37 @@ def _temperature_from_lead(lead: Lead) -> str:
     return "COLD"
 
 
+def _score_band(score_value: int) -> str:
+    if score_value >= 70:
+        return "HIGH"
+    if score_value >= 40:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _why_this_company(item: dict) -> str:
+    parts = []
+    if item.get("sector"):
+        parts.append(f"settore coerente: {item.get('sector')}")
+    if item.get("contact_email") or item.get("contact_phone"):
+        parts.append("contatti aziendali disponibili")
+    if item.get("website"):
+        parts.append("sito verificabile")
+    if not parts:
+        return "Profilo aziendale verificabile e coerente con la ricerca."
+    return (", ".join(parts)).capitalize() + "."
+
+
+def _client_probability(item: dict) -> str:
+    score = int(item.get("score") or 0)
+    has_contacts = bool(item.get("contact_email") or item.get("contact_phone"))
+    if score >= 70 and has_contacts:
+        return "HIGH"
+    if score >= 45 or has_contacts:
+        return "MEDIUM"
+    return "LOW"
+
+
 @router.post("/search-global")
 async def search_global_endpoint(
     payload: SearchGlobalIn,
@@ -134,6 +165,7 @@ async def search_global_endpoint(
 @router.post("/api/v1/company-search")
 async def company_search_endpoint(
     payload: CompanySearchIn,
+    mode: str = Query(default="normal", pattern="^(normal|premium)$"),
     user: User = Depends(get_current_user),
 ) -> dict:
     _ = user
@@ -156,18 +188,28 @@ async def company_search_endpoint(
             continue
         if payload.country and (item.get("country") or "").upper() == "GLOBAL":
             continue
-        cleaned.append(
-            {
-                "company_name": item.get("name"),
-                "website": item.get("website"),
-                "source_url": item.get("source_url") or item.get("website"),
-                "country": item.get("country"),
-                "classification": item.get("classification", "LOW"),
-                "contact_email": item.get("contact_email", ""),
-                "contact_phone": item.get("contact_phone", ""),
-            }
-        )
-    return {"results": cleaned[: payload.limit], "count": len(cleaned[: payload.limit])}
+        score_value = int(item.get("score") or 0)
+        row = {
+            "company_name": item.get("name"),
+            "website": item.get("website"),
+            "source_url": item.get("source_url") or item.get("website"),
+            "country": item.get("country"),
+            "score": _score_band(score_value),
+            "classification": item.get("classification", "LOW"),
+            "contact_email": item.get("contact_email", ""),
+            "contact_phone": item.get("contact_phone", ""),
+            "why_this_company": _why_this_company(item),
+            "client_probability": _client_probability(item),
+        }
+        cleaned.append(row)
+
+    if mode == "premium":
+        premium_rows = [r for r in cleaned if r.get("score") in {"HIGH", "MEDIUM"}]
+        premium_rows = premium_rows[: min(10, payload.limit)]
+        return {"mode": "premium", "results": premium_rows, "count": len(premium_rows)}
+
+    rows = cleaned[: payload.limit]
+    return {"mode": "normal", "results": rows, "count": len(rows)}
 
 
 @router.post("/analyze-company")
