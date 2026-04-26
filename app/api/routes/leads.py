@@ -206,9 +206,13 @@ async def company_search_endpoint(
     if mode == "premium":
         premium_rows = [r for r in cleaned if r.get("score") in {"HIGH", "MEDIUM"}]
         premium_rows = premium_rows[: min(10, payload.limit)]
+        if not premium_rows:
+            return {"mode": "premium", "results": [], "count": 0, "message": "Nessuna azienda trovata con criteri attuali"}
         return {"mode": "premium", "results": premium_rows, "count": len(premium_rows)}
 
     rows = cleaned[: payload.limit]
+    if not rows:
+        return {"mode": "normal", "results": [], "count": 0, "message": "Nessuna azienda trovata con criteri attuali"}
     return {"mode": "normal", "results": rows, "count": len(rows)}
 
 
