@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import apply_rate_limit
+from app.api.deps import apply_rate_limit, get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token, create_refresh_token, hash_password, verify_password
@@ -28,7 +28,7 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)) -> d
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=400, detail="Email already exists") from None
-    return {"id": user.id, "email": user.email, "company_name": user.company_name}
+    return {"id": user.id, "email": user.email, "company_name": user.company_name, "plan": user.plan}
 
 
 @router.post("/login", response_model=TokenOut)
@@ -65,3 +65,13 @@ async def refresh(payload: RefreshIn, db: AsyncSession = Depends(get_db)) -> Tok
         access_token=create_access_token(user.email, user.id),
         refresh_token=create_refresh_token(user.email, user.id),
     )
+
+
+@router.get("/me")
+async def me(user: User = Depends(get_current_user)) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "company_name": user.company_name,
+        "plan": (user.plan or "free"),
+    }

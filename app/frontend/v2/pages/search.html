@@ -39,6 +39,7 @@
                 <input id="premiumMode" type="checkbox" />
                 Ricerca Premium
               </label>
+              <button id="upgradeBtn" type="button" class="btn btn-secondary" style="margin-left:10px;display:none;">Passa a Premium</button>
             </div>
             <div style="margin-top:12px;">
               <button class="btn btn-primary" style="min-width:160px;">Cerca</button>
@@ -50,6 +51,31 @@
 
       <section id="results" class="cards"></section>
     </main>`;
+
+  async function setupPremiumAccess() {
+    try {
+      const me = await apiPremium("/auth/me");
+      const isPremiumUser = (me.plan || "free").toLowerCase() === "premium";
+      const premiumToggle = document.getElementById("premiumMode");
+      const upgradeBtn = document.getElementById("upgradeBtn");
+      if (!isPremiumUser) {
+        premiumToggle.disabled = true;
+        premiumToggle.checked = false;
+        upgradeBtn.style.display = "inline-flex";
+      } else {
+        premiumToggle.disabled = false;
+      }
+      upgradeBtn.addEventListener("click", () => {
+        const status = document.getElementById("status");
+        status.textContent = "Passa a Premium per sbloccare questa funzione.";
+      });
+    } catch {
+      const premiumToggle = document.getElementById("premiumMode");
+      premiumToggle.disabled = true;
+      premiumToggle.checked = false;
+    }
+  }
+  setupPremiumAccess();
 
   document.getElementById("f").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -95,7 +121,7 @@
         });
       });
     } catch (err) {
-      status.textContent = "Ricerca non disponibile al momento.";
+      status.textContent = err.message || "Ricerca non disponibile al momento.";
       results.innerHTML = `<div class="panel muted">Si è verificato un errore.</div>`;
     }
   });

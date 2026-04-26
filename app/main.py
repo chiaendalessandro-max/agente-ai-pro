@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from sqlalchemy import inspect
 
 from app.api.router import router as api_router
 from app.core.config import settings
@@ -46,11 +47,27 @@ _stop_event = asyncio.Event()
 _scheduler_task: asyncio.Task | None = None
 
 
+def _ensure_user_plan_column(sync_conn) -> None:
+    try:
+        insp = inspect(sync_conn)
+        cols = {c["name"] for c in insp.get_columns("users")}
+        if "plan" in cols:
+            return
+        dialect = str(sync_conn.dialect.name).lower()
+        if "sqlite" in dialect:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN plan VARCHAR(20) NOT NULL DEFAULT 'free'"))
+        else:
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT 'free'"))
+    except Exception as exc:
+        logger.warning("ensure plan column failed: %s", str(exc)[:220])
+
+
 @app.on_event("startup")
 async def startup() -> None:
     global _scheduler_task
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_user_plan_column)
     _scheduler_task = asyncio.create_task(scheduler_loop(_stop_event))
     logger.info("Startup complete")
 

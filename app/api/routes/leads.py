@@ -168,17 +168,21 @@ async def company_search_endpoint(
     mode: str = Query(default="normal", pattern="^(normal|premium)$"),
     user: User = Depends(get_current_user),
 ) -> dict:
-    _ = user
+    user_plan = (getattr(user, "plan", "") or "free").lower()
+    if mode == "premium" and user_plan != "premium":
+        raise HTTPException(status_code=403, detail="Funzione disponibile solo per utenti Premium")
+
     try:
-        results = await asyncio.to_thread(
-            search_companies_real,
-            payload.query,
-            payload.country,
-            payload.limit,
-        )
+        results = await asyncio.to_thread(search_companies_real, payload.query, payload.country, payload.limit)
     except Exception as exc:
-        logger.exception("company_search failed: %s", str(exc)[:300])
-        raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile.") from exc
+        logger.exception("company_search failed mode=%s: %s", mode, str(exc)[:300])
+        if mode == "premium" and user_plan == "premium":
+            try:
+                results = await asyncio.to_thread(search_companies_real, payload.query, payload.country, payload.limit)
+            except Exception:
+                raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile.") from exc
+        else:
+            raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile.") from exc
 
     cleaned = []
     for item in results:
