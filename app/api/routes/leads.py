@@ -21,6 +21,7 @@ from app.schemas.lead import (
     SearchGlobalIn,
 )
 from app.services.analyzer_service import safe_analyze_company
+from app.services.search_services import normal_search_service, premium_search_service
 from app.services.scoring_service import score_lead
 from company_search_real import search_companies_real
 
@@ -173,51 +174,25 @@ async def company_search_endpoint(
         raise HTTPException(status_code=403, detail="Funzione disponibile solo per utenti Premium")
 
     try:
-        results = await asyncio.to_thread(search_companies_real, payload.query, payload.country, payload.limit)
+        if mode == "premium":
+            out = await asyncio.to_thread(premium_search_service, payload.query, payload.country, payload.limit)
+        else:
+            out = await asyncio.to_thread(normal_search_service, payload.query, payload.country, payload.limit)
     except Exception as exc:
         logger.exception("company_search failed mode=%s: %s", mode, str(exc)[:300])
-        if mode == "premium" and user_plan == "premium":
-            try:
-                results = await asyncio.to_thread(search_companies_real, payload.query, payload.country, payload.limit)
-            except Exception:
-                raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile.") from exc
-        else:
-            raise HTTPException(status_code=503, detail="Ricerca temporaneamente non disponibile.") from exc
-
-    cleaned = []
-    for item in results:
-        if not item.get("name"):
-            continue
-        if not (item.get("website") or item.get("source_url")):
-            continue
-        if payload.country and (item.get("country") or "").upper() == "GLOBAL":
-            continue
-        score_value = int(item.get("score") or 0)
-        row = {
-            "company_name": item.get("name"),
-            "website": item.get("website"),
-            "source_url": item.get("source_url") or item.get("website"),
-            "country": item.get("country"),
-            "score": _score_band(score_value),
-            "classification": item.get("classification", "LOW"),
-            "contact_email": item.get("contact_email", ""),
-            "contact_phone": item.get("contact_phone", ""),
-            "why_this_company": _why_this_company(item),
-            "client_probability": _client_probability(item),
+        out = {
+            "mode": mode,
+            "count": 0,
+            "results": [],
+            "message": "Nessuna azienda trovata con criteri attuali",
+            "meta": {
+                "queries_used": [],
+                "raw_results_count": 0,
+                "valid_results_count": 0,
+                "discarded_results_count": 0,
+            },
         }
-        cleaned.append(row)
-
-    if mode == "premium":
-        premium_rows = [r for r in cleaned if r.get("score") in {"HIGH", "MEDIUM"}]
-        premium_rows = premium_rows[: min(10, payload.limit)]
-        if not premium_rows:
-            return {"mode": "premium", "results": [], "count": 0, "message": "Nessuna azienda trovata con criteri attuali"}
-        return {"mode": "premium", "results": premium_rows, "count": len(premium_rows)}
-
-    rows = cleaned[: payload.limit]
-    if not rows:
-        return {"mode": "normal", "results": [], "count": 0, "message": "Nessuna azienda trovata con criteri attuali"}
-    return {"mode": "normal", "results": rows, "count": len(rows)}
+    return out
 
 
 @router.post("/analyze-company")

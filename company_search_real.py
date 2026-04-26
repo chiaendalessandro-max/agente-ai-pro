@@ -313,42 +313,104 @@ def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) ->
 
 
 def search_companies_real(query: str, country: str, num_results: int = 10) -> list[dict]:
-    target = max(5, min(20, int(num_results or 10)))
-    try:
-        use_ai = is_ollama_available()
+    results, _ = search_companies_real_with_meta(query, country, num_results)
+    return results
 
-        queries = _phase_a_query_builder(query, country, expanded=False)
-        if use_ai:
-            queries.extend([q for q in ai_expand_search_queries(query, country) if isinstance(q, str)])
-        queries = list(dict.fromkeys(queries))[:10]
+
+def search_companies_real_with_meta(query: str, country: str, num_results: int = 10) -> tuple[list[dict], dict]:
+    target = max(5, min(20, int(num_results or 10)))
+    meta = {
+        "queries_used": [],
+        "raw_results_count": 0,
+        "valid_results_count": 0,
+        "discarded_results_count": 0,
+    }
+    try:
+        try:
+            use_ai = is_ollama_available()
+        except Exception:
+            use_ai = False
+
+        try:
+            queries = _phase_a_query_builder(query, country, expanded=False)
+            if use_ai:
+                try:
+                    queries.extend([q for q in ai_expand_search_queries(query, country) if isinstance(q, str)])
+                except Exception as exc:
+                    logger.warning("[DEBUG] ai_expand_failed: %s", str(exc)[:120])
+            queries = list(dict.fromkeys(queries))[:10]
+        except Exception as exc:
+            logger.warning("[DEBUG] phase_query_builder_failed: %s", str(exc)[:120])
+            queries = []
+        meta["queries_used"] = queries
         logger.info("[DEBUG] queries_generated=%s %s", len(queries), queries)
 
-        raw = _phase_b_fetch(queries, country)
+        try:
+            raw = _phase_b_fetch(queries, country) if queries else []
+        except Exception as exc:
+            logger.warning("[DEBUG] phase_fetch_failed: %s", str(exc)[:120])
+            raw = []
+        meta["raw_results_count"] = len(raw)
         logger.info("[DEBUG] raw_results_count=%s", len(raw))
 
-        extracted = _phase_c_extract(raw)
-        deduped = _phase_d_normalize_dedup(extracted)
-        valid, discarded = _phase_e_validate(deduped, query, country)
+        try:
+            extracted = _phase_c_extract(raw)
+        except Exception as exc:
+            logger.warning("[DEBUG] phase_extract_failed: %s", str(exc)[:120])
+            extracted = []
+        try:
+            deduped = _phase_d_normalize_dedup(extracted)
+        except Exception as exc:
+            logger.warning("[DEBUG] phase_dedup_failed: %s", str(exc)[:120])
+            deduped = extracted
+        try:
+            valid, discarded = _phase_e_validate(deduped, query, country)
+        except Exception as exc:
+            logger.warning("[DEBUG] phase_validate_failed: %s", str(exc)[:120])
+            valid, discarded = [], {"failed_validation_phase": len(deduped)}
 
         if len(valid) < target:
-            q2 = _phase_a_query_builder(query, country, expanded=True)
-            if use_ai:
-                q2.extend([q for q in ai_expand_search_queries(f"{query} companies", country) if isinstance(q, str)])
-            q2 = list(dict.fromkeys(q2))[:10]
+            try:
+                q2 = _phase_a_query_builder(query, country, expanded=True)
+                if use_ai:
+                    try:
+                        q2.extend([q for q in ai_expand_search_queries(f"{query} companies", country) if isinstance(q, str)])
+                    except Exception as exc:
+                        logger.warning("[DEBUG] ai_expand_fallback_failed: %s", str(exc)[:120])
+                q2 = list(dict.fromkeys(q2))[:10]
+            except Exception as exc:
+                logger.warning("[DEBUG] phase_query_builder_fallback_failed: %s", str(exc)[:120])
+                q2 = []
+            meta["queries_used"] = list(dict.fromkeys(meta["queries_used"] + q2))[:20]
             logger.info("[DEBUG] queries_generated_expanded=%s %s", len(q2), q2)
-            raw2 = _phase_b_fetch(q2, country)
+            try:
+                raw2 = _phase_b_fetch(q2, country) if q2 else []
+            except Exception as exc:
+                logger.warning("[DEBUG] phase_fetch_fallback_failed: %s", str(exc)[:120])
+                raw2 = []
+            meta["raw_results_count"] += len(raw2)
             logger.info("[DEBUG] raw_results_count_expanded=%s", len(raw2))
-            extracted2 = _phase_c_extract(raw2)
-            deduped2 = _phase_d_normalize_dedup(extracted2)
-            valid2, discarded2 = _phase_e_validate(deduped2, query, country)
+            try:
+                extracted2 = _phase_c_extract(raw2)
+                deduped2 = _phase_d_normalize_dedup(extracted2)
+                valid2, discarded2 = _phase_e_validate(deduped2, query, country)
+            except Exception as exc:
+                logger.warning("[DEBUG] fallback_extract_validate_failed: %s", str(exc)[:120])
+                valid2, discarded2 = [], {"fallback_failed": len(raw2)}
             discarded = {k: discarded.get(k, 0) + discarded2.get(k, 0) for k in set(discarded) | set(discarded2)}
             valid = _phase_d_normalize_dedup(valid + valid2)
 
-        enriched = _phase_f_enrich(valid, query, country, use_ai=use_ai)
+        try:
+            enriched = _phase_f_enrich(valid, query, country, use_ai=use_ai)
+        except Exception as exc:
+            logger.warning("[DEBUG] phase_enrich_failed: %s", str(exc)[:120])
+            enriched = valid
         final = [r for r in enriched if r.get("website") and r.get("source_url")]
+        meta["valid_results_count"] = len(final)
+        meta["discarded_results_count"] = int(sum(discarded.values()))
         logger.info("[DEBUG] valid_results_count=%s", len(final))
         logger.info("[DEBUG] scartati_count=%s reason=%s", sum(discarded.values()), discarded)
-        return final[:target]
+        return final[:target], meta
     except Exception as exc:
         logger.exception("search_companies_real failed: %s", str(exc)[:220])
-        return []
+        return [], meta
