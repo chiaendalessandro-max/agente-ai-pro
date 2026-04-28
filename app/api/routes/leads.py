@@ -21,7 +21,7 @@ from app.schemas.lead import (
     SearchGlobalIn,
 )
 from app.services.analyzer_service import safe_analyze_company
-from app.services.search_services import normal_search_service, premium_search_service
+from app.services.company_search_service import normal_search_service, premium_search_service
 from app.services.scoring_service import score_lead
 from company_search_real import search_companies_real
 
@@ -175,9 +175,21 @@ async def company_search_endpoint(
 
     try:
         if mode == "premium":
-            out = await asyncio.to_thread(premium_search_service, payload.query, payload.country, payload.limit)
+            out = await asyncio.to_thread(
+                premium_search_service,
+                payload.query,
+                payload.country,
+                payload.sector,
+                payload.limit,
+            )
         else:
-            out = await asyncio.to_thread(normal_search_service, payload.query, payload.country, payload.limit)
+            out = await asyncio.to_thread(
+                normal_search_service,
+                payload.query,
+                payload.country,
+                payload.sector,
+                payload.limit,
+            )
     except Exception as exc:
         logger.exception("company_search failed mode=%s: %s", mode, str(exc)[:300])
         out = {

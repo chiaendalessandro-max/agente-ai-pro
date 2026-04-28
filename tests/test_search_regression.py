@@ -49,9 +49,10 @@ def test_normal_search_no_500(monkeypatch: pytest.MonkeyPatch) -> None:
     app.dependency_overrides[get_current_user] = _override_user("free")
     app.dependency_overrides[apply_rate_limit] = _no_rate_limit
 
-    def _fake_normal(query: str, country: str, limit: int) -> dict:
+    def _fake_normal(query: str, country: str, sector: str, limit: int) -> dict:
         assert query == "aviazione"
         assert country == "Italia"
+        assert isinstance(sector, str)
         assert limit == 10
         return {
             "mode": "normal",
@@ -98,7 +99,7 @@ def test_premium_user_no_500_and_empty_result_contract(monkeypatch: pytest.Monke
     app.dependency_overrides[get_current_user] = _override_user("premium")
     app.dependency_overrides[apply_rate_limit] = _no_rate_limit
 
-    def _fake_premium(_query: str, _country: str, _limit: int) -> dict:
+    def _fake_premium(_query: str, _country: str, _sector: str, _limit: int) -> dict:
         return {
             "mode": "premium",
             "count": 0,
@@ -128,7 +129,7 @@ def test_normal_search_empty_list_no_crash(monkeypatch: pytest.MonkeyPatch) -> N
     app.dependency_overrides[get_current_user] = _override_user("free")
     app.dependency_overrides[apply_rate_limit] = _no_rate_limit
 
-    def _fake_normal(_query: str, _country: str, _limit: int) -> dict:
+    def _fake_normal(_query: str, _country: str, _sector: str, _limit: int) -> dict:
         return {
             "mode": "normal",
             "count": 0,

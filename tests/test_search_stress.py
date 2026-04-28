@@ -62,7 +62,7 @@ async def _stress_run(mode: str, user_plan: str, payloads: list[dict], expected_
 
 @pytest.mark.asyncio
 async def test_stress_normal_10_concurrent_same_query(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fake_normal(query: str, country: str, limit: int) -> dict:
+    def _fake_normal(query: str, country: str, _sector: str, limit: int) -> dict:
         return {
             "mode": "normal",
             "count": 1,
@@ -90,7 +90,7 @@ async def test_stress_normal_10_concurrent_same_query(monkeypatch: pytest.Monkey
 
 @pytest.mark.asyncio
 async def test_stress_normal_20_concurrent_mixed_query_and_country(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fake_normal(query: str, country: str, limit: int) -> dict:
+    def _fake_normal(query: str, country: str, _sector: str, limit: int) -> dict:
         return {
             "mode": "normal",
             "count": 1,
@@ -141,7 +141,7 @@ async def test_stress_premium_free_403(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_stress_premium_premium_20_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fake_premium(query: str, country: str, limit: int) -> dict:
+    def _fake_premium(query: str, country: str, _sector: str, limit: int) -> dict:
         return {
             "mode": "premium",
             "count": 1,
@@ -169,7 +169,7 @@ async def test_stress_premium_premium_20_valid_json(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_stress_no_results_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fake_normal(_query: str, _country: str, _limit: int) -> dict:
+    def _fake_normal(_query: str, _country: str, _sector: str, _limit: int) -> dict:
         return {
             "mode": "normal",
             "count": 0,
@@ -198,7 +198,7 @@ async def test_stress_no_results_returns_empty(monkeypatch: pytest.MonkeyPatch) 
 
 @pytest.mark.asyncio
 async def test_stress_sources_unreachable_no_crash(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _failing_premium(_query: str, _country: str, _limit: int) -> dict:
+    def _failing_premium(_query: str, _country: str, _sector: str, _limit: int) -> dict:
         raise RuntimeError("upstream source timeout")
 
     monkeypatch.setattr(leads_routes, "premium_search_service", _failing_premium)
