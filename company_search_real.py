@@ -2,6 +2,7 @@ import logging
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
 from urllib.parse import quote_plus, urlparse
 
 import requests
@@ -40,6 +41,9 @@ _SESSION = requests.Session()
 _SESSION.mount("http://", HTTPAdapter(max_retries=Retry(total=2, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])))
 _SESSION.mount("https://", HTTPAdapter(max_retries=Retry(total=2, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])))
 
+_SEARCH_CACHE: dict[str, tuple[float, tuple[list[dict], dict]]] = {}
+_SEARCH_CACHE_TTL_SECONDS = 180
+
 
 def _norm_domain(url: str) -> str:
     try:
@@ -48,7 +52,7 @@ def _norm_domain(url: str) -> str:
         return ""
 
 
-def _safe_get(url: str, timeout: int = 5) -> str:
+def _safe_get(url: str, timeout: int = 4) -> str:
     r = _SESSION.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
     r.raise_for_status()
     return r.text
@@ -96,7 +100,7 @@ def _phase_a_query_builder(query: str, country: str, expanded: bool = False) -> 
 def _fetch_bing(query: str) -> list[dict]:
     out = []
     try:
-        html = _safe_get(f"https://www.bing.com/search?q={quote_plus(query)}&count=20&setlang=en")
+        html = _safe_get(f"https://www.bing.com/search?q={quote_plus(query)}&count=20&setlang=en", timeout=4)
         soup = BeautifulSoup(html, "lxml")
         for li in soup.select("li.b_algo"):
             a = li.select_one("h2 a")
@@ -111,7 +115,7 @@ def _fetch_bing(query: str) -> list[dict]:
 def _fetch_ddg_html(query: str) -> list[dict]:
     out = []
     try:
-        html = _safe_get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}")
+        html = _safe_get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}", timeout=4)
         soup = BeautifulSoup(html, "lxml")
         for row in soup.select(".result"):
             a = row.select_one(".result__a")
@@ -153,7 +157,7 @@ def _phase_b_fetch(queries: list[str], country: str) -> list[dict]:
             logger.warning("[FETCH] batch_fail query=%r err=%s", q[:80], str(exc)[:120])
         return local
 
-    workers = min(6, max(1, len(queries)))
+    workers = min(8, max(1, len(queries)))
     if not queries:
         return raw
     with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -286,13 +290,20 @@ def _phase_e_validate(rows: list[dict], query: str, country: str) -> tuple[list[
 
 def _contacts(website: str) -> tuple[str, str]:
     try:
-        html = _safe_get(website, timeout=5)
+        html = _safe_get(website, timeout=4)
         text = BeautifulSoup(html, "lxml").get_text(" ", strip=True)[:25000]
         em = re.findall(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", text, re.I)
         ph = re.findall(r"(\+?\d[\d\s().-]{7,}\d)", text)
         return (em[0].lower() if em else ""), (ph[0].strip() if ph else "")
     except Exception:
         return "", ""
+
+
+def _contacts_from_snippet(snippet: str) -> tuple[str, str]:
+    s = (snippet or "")[:8000]
+    em = re.findall(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", s, re.I)
+    ph = re.findall(r"(\+?\d[\d\s().-]{7,}\d)", s)
+    return (em[0].lower() if em else ""), (ph[0].strip() if ph else "")
 
 
 def _classify_score(has_contacts: bool, snippet: str) -> tuple[int, str]:
@@ -314,12 +325,16 @@ def _classify_score(has_contacts: bool, snippet: str) -> tuple[int, str]:
 
 def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) -> list[dict]:
     out = []
-    max_contact_scans = 6
+    max_contact_scans = 5
     max_ai_rows = 3
-    for idx, r in enumerate(rows):
-        email, phone = ("", "")
-        if idx < max_contact_scans:
+    homepage_fetch_budget = 0
+    ai_calls = 0
+    for r in rows:
+        email, phone = _contacts_from_snippet(r.get("snippet", ""))
+        has_core = bool(r.get("company_name") and r.get("domain") and (r.get("snippet") or "").strip())
+        if (not email and not phone) and homepage_fetch_budget < max_contact_scans:
             email, phone = _contacts(r.get("website", ""))
+            homepage_fetch_budget += 1
         has_contacts = bool(email or phone)
         score, cls = _classify_score(has_contacts, r.get("snippet", ""))
         item = {
@@ -339,11 +354,16 @@ def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) ->
             "score": score,
             "classification": cls,
         }
-        if use_ai and idx < max_ai_rows:
+        if use_ai and (not has_core) and ai_calls < max_ai_rows:
+            ai_calls += 1
             try:
-                extra = ai_enrich_company(item["name"], item["description"], query)
+                with ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(ai_enrich_company, item["name"], item["description"], query)
+                    extra = fut.result(timeout=2.5)
                 if isinstance(extra, dict):
                     item.update(extra)
+            except FuturesTimeout:
+                logger.warning("[AI] enrich_timeout name=%r", (item.get("name") or "")[:80])
             except Exception:
                 pass
         out.append(item)
@@ -351,17 +371,37 @@ def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) ->
 
 
 def search_companies_real(query: str, country: str, num_results: int = 10) -> list[dict]:
-    results, _ = search_companies_real_with_meta(query, country, num_results)
+    results, _ = search_companies_real_with_meta(query, country, num_results, mode="normal")
     return results
 
 
-def search_companies_real_with_meta(query: str, country: str, num_results: int = 10) -> tuple[list[dict], dict]:
+def search_companies_real_with_meta(
+    query: str,
+    country: str,
+    num_results: int = 10,
+    *,
+    mode: str = "normal",
+) -> tuple[list[dict], dict]:
     target = max(1, min(50, int(num_results or 10)))
+    mode_norm = (mode or "normal").strip().lower()
+    if mode_norm not in {"normal", "premium"}:
+        mode_norm = "normal"
+    cache_key = f"{mode_norm}|{(query or '').strip().lower()}|{(country or '').strip().lower()}|{target}"
+    now = time.time()
+    cached = _SEARCH_CACHE.get(cache_key)
+    if cached and (now - cached[0]) <= _SEARCH_CACHE_TTL_SECONDS:
+        payload = cached[1]
+        meta_cached = dict(payload[1])
+        meta_cached["cache_hit"] = True
+        meta_cached["cache_age_seconds"] = round(now - cached[0], 3)
+        return payload[0], meta_cached
+
     meta = {
         "queries_used": [],
         "raw_results_count": 0,
         "valid_results_count": 0,
         "discarded_results_count": 0,
+        "cache_hit": False,
     }
     try:
         try:
@@ -407,7 +447,10 @@ def search_companies_real_with_meta(query: str, country: str, num_results: int =
             logger.warning("[DEBUG] phase_validate_failed: %s", str(exc)[:120])
             valid, discarded = [], {"failed_validation_phase": len(deduped)}
 
-        if len(valid) < target:
+        early_stop_at = 5 if mode_norm == "premium" else 10
+        need_more_fetch = len(valid) < target and len(valid) < early_stop_at
+
+        if need_more_fetch:
             try:
                 q2 = _phase_a_query_builder(query, country, expanded=True)
                 if use_ai:
@@ -448,7 +491,9 @@ def search_companies_real_with_meta(query: str, country: str, num_results: int =
         meta["discarded_results_count"] = int(sum(discarded.values()))
         logger.info("[DEBUG] valid_results_count=%s", len(final))
         logger.info("[DEBUG] scartati_count=%s reason=%s", sum(discarded.values()), discarded)
-        return final[:target], meta
+        out = final[:target], meta
+        _SEARCH_CACHE[cache_key] = (time.time(), out)
+        return out
     except Exception as exc:
         logger.exception("search_companies_real failed: %s", str(exc)[:220])
         return [], meta

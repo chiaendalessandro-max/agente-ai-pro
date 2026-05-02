@@ -7,3 +7,8 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Local / machine-specific (do not commit)
+da_installare.txt
+ollama_model.txt
+pytest_agent.db

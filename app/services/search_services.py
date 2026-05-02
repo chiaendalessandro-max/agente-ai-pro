@@ -51,7 +51,7 @@ def _client_probability(item: dict[str, Any]) -> str:
 def shared_search_pipeline(query: str, country: str, limit: int) -> dict[str, Any]:
     meta = _empty_meta()
     try:
-        results, raw_meta = search_companies_real_with_meta(query, country, limit)
+        results, raw_meta = search_companies_real_with_meta(query, country, limit, mode="normal")
         if isinstance(raw_meta, dict):
             meta.update({k: raw_meta.get(k, meta.get(k)) for k in meta.keys()})
     except Exception as exc:

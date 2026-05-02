@@ -31,9 +31,9 @@ def test_apollo_absent_uses_internal_fallback(monkeypatch: pytest.MonkeyPatch) -
     import app.services.company_search_service as svc
 
     monkeypatch.setattr(svc.settings, "apollo_api_key", "", raising=False)
-    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l: _internal_sample())
+    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l, mode="normal": _internal_sample())
 
-    out = svc.normal_search_service("aviazione", "Italia", 10)
+    out = svc.normal_search_service("aviazione", "Italia", "", 10)
     assert out["mode"] == "normal"
     assert out["count"] >= 1
     assert isinstance(out["results"], list)
@@ -52,9 +52,9 @@ def test_apollo_error_uses_internal_fallback(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(svc.settings, "apollo_api_key", "test-key", raising=False)
     monkeypatch.setattr(svc, "ApolloProvider", _BrokenApollo)
-    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l: _internal_sample())
+    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l, mode="normal": _internal_sample())
 
-    out = svc.normal_search_service("aviazione", "Italia", 10)
+    out = svc.normal_search_service("aviazione", "Italia", "", 10)
     assert out["mode"] == "normal"
     assert out["count"] >= 1
     assert out["results"][0]["company_name"] == "Internal Air One"
@@ -84,9 +84,9 @@ def test_apollo_primary_then_internal_completion(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(svc.settings, "apollo_api_key", "test-key", raising=False)
     monkeypatch.setattr(svc, "ApolloProvider", _ApolloOk)
-    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l: _internal_sample())
+    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l, mode="normal": _internal_sample())
 
-    out = svc.normal_search_service("aviazione", "Italia", 10)
+    out = svc.normal_search_service("aviazione", "Italia", "", 10)
     names = {r["company_name"] for r in out["results"]}
     assert "Apollo Jet" in names
     assert "Internal Air One" in names
@@ -116,9 +116,9 @@ def test_premium_still_works_with_apollo_path(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(svc.settings, "apollo_api_key", "test-key", raising=False)
     monkeypatch.setattr(svc, "ApolloProvider", _ApolloOk)
-    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l: ([], {"raw_results_count": 0}))
+    monkeypatch.setattr(svc, "search_companies_real_with_meta", lambda q, c, l, mode="premium": ([], {"raw_results_count": 0}))
 
-    out = svc.premium_search_service("aviazione", "Italia", 10)
+    out = svc.premium_search_service("aviazione", "Italia", "", 10)
     assert out["mode"] == "premium"
     assert out["count"] == 1
     assert out["results"][0]["score"] in {"HIGH", "MEDIUM"}

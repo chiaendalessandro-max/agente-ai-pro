@@ -47,5 +47,47 @@ def test_phase_f_enrich_limits_contact_scans_and_ai_calls(monkeypatch: pytest.Mo
 
     out = csr._phase_f_enrich(rows, query="private jet", country="Italia", use_ai=True)
     assert len(out) == 10
-    assert calls["contacts"] == 6
+    assert calls["contacts"] == 5
+    assert calls["ai"] == 0
+
+
+def test_phase_f_enrich_ai_only_when_core_incomplete(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"contacts": 0, "ai": 0}
+
+    def _contacts(_website: str) -> tuple[str, str]:
+        calls["contacts"] += 1
+        return "", ""
+
+    def _ai_enrich(*_args, **_kwargs):
+        calls["ai"] += 1
+        return {}
+
+    monkeypatch.setattr(csr, "_contacts", _contacts)
+    monkeypatch.setattr(csr, "ai_enrich_company", _ai_enrich)
+
+    rows = []
+    for i in range(3):
+        rows.append(
+            {
+                "company_name": f"NoSnippet {i}",
+                "website": f"https://nosnippet{i}.com/",
+                "source_url": f"https://nosnippet{i}.com/",
+                "domain": f"nosnippet{i}.com",
+                "snippet": "",
+            }
+        )
+    for i in range(7):
+        rows.append(
+            {
+                "company_name": f"Company {i}",
+                "website": f"https://company{i}.com/",
+                "source_url": f"https://company{i}.com/",
+                "domain": f"company{i}.com",
+                "snippet": "operator corporate services",
+            }
+        )
+
+    out = csr._phase_f_enrich(rows, query="private jet", country="Italia", use_ai=True)
+    assert len(out) == 10
     assert calls["ai"] == 3
+    assert calls["contacts"] == 5

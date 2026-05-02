@@ -111,18 +111,21 @@ def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _internal_rows(query: str, country: str, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _internal_rows(query: str, country: str, limit: int, *, mode: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     try:
-        rows, meta = search_companies_real_with_meta(query, country, limit)
+        rows, meta = search_companies_real_with_meta(query, country, limit, mode=mode)
         return rows or [], meta or _empty_meta()
     except Exception as exc:
         logger.exception("internal search fallback failed: %s", str(exc)[:200])
         return [], _empty_meta()
 
 
-def shared_search_pipeline(query: str, country: str, sector: str = "", limit: int = 10) -> dict[str, Any]:
+def shared_search_pipeline(query: str, country: str, sector: str = "", limit: int = 10, *, mode: str = "normal") -> dict[str, Any]:
     meta = _empty_meta()
     requested_limit = max(1, min(int(limit or 10), 50))
+    mode_norm = (mode or "normal").strip().lower()
+    if mode_norm not in {"normal", "premium"}:
+        mode_norm = "normal"
     apollo_key = getattr(settings, "apollo_api_key", "") or ""
     combined: list[dict[str, Any]] = []
 
@@ -141,7 +144,7 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
             logger.warning("Apollo path failed, switching to internal fallback: %s", str(exc)[:200])
 
     if len(combined) < requested_limit:
-        internal_rows, internal_meta = _internal_rows(query=query, country=country, limit=requested_limit)
+        internal_rows, internal_meta = _internal_rows(query=query, country=country, limit=requested_limit, mode=mode_norm)
         combined.extend(internal_rows)
         meta["queries_used"] = internal_meta.get("queries_used", [])
         meta["raw_results_count"] = int(meta.get("raw_results_count", 0) or 0) + int(internal_meta.get("raw_results_count", 0) or 0)
@@ -181,7 +184,7 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
 
 
 def normal_search_service(query: str, country: str, sector: str = "", limit: int = 10) -> dict[str, Any]:
-    out = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit)
+    out = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit, mode="normal")
     out["results"] = out.get("results", [])[: min(int(limit or 10), 50)]
     out["mode"] = "normal"
     out["count"] = len(out["results"])
@@ -190,7 +193,7 @@ def normal_search_service(query: str, country: str, sector: str = "", limit: int
 
 def premium_search_service(query: str, country: str, sector: str = "", limit: int = 10) -> dict[str, Any]:
     try:
-        base = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit)
+        base = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit, mode="premium")
         premium_rows = [r for r in base["results"] if r.get("score") in {"HIGH", "MEDIUM"}]
         premium_rows = premium_rows[: min(10, max(1, int(limit or 10)))]
         return {
