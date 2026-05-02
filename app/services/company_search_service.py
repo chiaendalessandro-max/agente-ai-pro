@@ -182,7 +182,7 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
 
 def normal_search_service(query: str, country: str, sector: str = "", limit: int = 10) -> dict[str, Any]:
     out = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit)
-    out["results"] = out.get("results", [])[: max(1, min(int(limit or 10), 50))]
+    out["results"] = out.get("results", [])[: min(int(limit or 10), 50)]
     out["mode"] = "normal"
     out["count"] = len(out["results"])
     return out

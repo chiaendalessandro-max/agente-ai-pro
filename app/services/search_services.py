@@ -84,7 +84,7 @@ def shared_search_pipeline(query: str, country: str, limit: int) -> dict[str, An
 
     meta["valid_results_count"] = len(cleaned)
     return {
-        "results": cleaned[: max(1, min(int(limit or 10), 50))],
+        "results": cleaned[: min(int(limit or 10), 50)],
         "message": "" if cleaned else "Nessuna azienda trovata con criteri attuali",
         "meta": meta,
     }

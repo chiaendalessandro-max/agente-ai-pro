@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote_plus, urlparse
 
 import requests
@@ -140,12 +141,28 @@ def _fetch_ddgs(query: str, region: str) -> list[dict]:
 def _phase_b_fetch(queries: list[str], country: str) -> list[dict]:
     ctx = _country_ctx(country)
     region = ctx.get("region", "wt-wt")
-    raw = []
-    for q in queries:
-        raw.extend(_fetch_ddgs(q, region))
-        raw.extend(_fetch_bing(q))
-        raw.extend(_fetch_ddg_html(q))
-        time.sleep(0.15)
+    raw: list[dict] = []
+
+    def _fetch_one(q: str) -> list[dict]:
+        local: list[dict] = []
+        try:
+            local.extend(_fetch_ddgs(q, region))
+            local.extend(_fetch_bing(q))
+            local.extend(_fetch_ddg_html(q))
+        except Exception as exc:
+            logger.warning("[FETCH] batch_fail query=%r err=%s", q[:80], str(exc)[:120])
+        return local
+
+    workers = min(6, max(1, len(queries)))
+    if not queries:
+        return raw
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_fetch_one, q) for q in queries]
+        for fut in as_completed(futures):
+            try:
+                raw.extend(fut.result())
+            except Exception as exc:
+                logger.warning("[FETCH] future_failed err=%s", str(exc)[:120])
     return raw
 
 
@@ -220,7 +237,22 @@ def _country_ok(row: dict, country: str) -> bool:
 def _phase_e_validate(rows: list[dict], query: str, country: str) -> tuple[list[dict], dict]:
     discarded = {"missing_fields": 0, "non_company": 0, "country_mismatch": 0, "invalid_name": 0}
     q_words = {w for w in re.findall(r"[a-zA-Z]{3,}", (query or "").lower())}
-    aviation_query = any(k in q_words for k in ("jet", "aviation", "charter", "air", "aero", "flight"))
+    q_lower = (query or "").lower()
+    aviation_keywords = (
+        "jet",
+        "aviation",
+        "charter",
+        "air",
+        "aero",
+        "flight",
+        "aviazione",
+        "aerotaxi",
+        "elicotter",
+        "helicopter",
+        "aircraft",
+        "airline",
+    )
+    aviation_query = any(k in q_lower for k in aviation_keywords)
     valid = []
     for r in rows:
         if not r.get("company_name") or not (r.get("website") or r.get("source_url")):
@@ -240,12 +272,14 @@ def _phase_e_validate(rows: list[dict], query: str, country: str) -> tuple[list[
             discarded["invalid_name"] += 1
             continue
         bag = f"{nm} {(r.get('snippet') or '').lower()} {(r.get('domain') or '').lower()}"
-        if aviation_query and not any(k in bag for k in ("jet", "aviation", "charter", "aircraft", "flight", "aero")):
+        if aviation_query and not any(k in bag for k in aviation_keywords):
             discarded["invalid_name"] += 1
             continue
-        if q_words and not any(w in (nm + " " + (r.get("snippet") or "").lower()) for w in q_words):
-            discarded["invalid_name"] += 1
-            continue
+        if q_words:
+            hay = f"{nm} {(r.get('snippet') or '').lower()} {(r.get('domain') or '').lower()}"
+            if not any(w in hay for w in q_words):
+                discarded["invalid_name"] += 1
+                continue
         valid.append(r)
     return valid, discarded
 
@@ -280,8 +314,12 @@ def _classify_score(has_contacts: bool, snippet: str) -> tuple[int, str]:
 
 def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) -> list[dict]:
     out = []
-    for r in rows:
-        email, phone = _contacts(r.get("website", ""))
+    max_contact_scans = 6
+    max_ai_rows = 3
+    for idx, r in enumerate(rows):
+        email, phone = ("", "")
+        if idx < max_contact_scans:
+            email, phone = _contacts(r.get("website", ""))
         has_contacts = bool(email or phone)
         score, cls = _classify_score(has_contacts, r.get("snippet", ""))
         item = {
@@ -301,7 +339,7 @@ def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) ->
             "score": score,
             "classification": cls,
         }
-        if use_ai:
+        if use_ai and idx < max_ai_rows:
             try:
                 extra = ai_enrich_company(item["name"], item["description"], query)
                 if isinstance(extra, dict):
@@ -318,7 +356,7 @@ def search_companies_real(query: str, country: str, num_results: int = 10) -> li
 
 
 def search_companies_real_with_meta(query: str, country: str, num_results: int = 10) -> tuple[list[dict], dict]:
-    target = max(5, min(20, int(num_results or 10)))
+    target = max(1, min(50, int(num_results or 10)))
     meta = {
         "queries_used": [],
         "raw_results_count": 0,

@@ -93,6 +93,7 @@
         body: JSON.stringify({
           query: document.getElementById("q").value,
           country: document.getElementById("country").value,
+          sector: document.getElementById("sector").value,
           limit: Number(document.getElementById("limit").value || 10),
         }),
       });
