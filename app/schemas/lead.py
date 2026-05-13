@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -14,6 +16,10 @@ class CompanySearchIn(BaseModel):
     country: str = Field(default="", max_length=80)
     sector: str = Field(default="", max_length=120)
     limit: int = Field(default=10, ge=1, le=50)
+    language: Literal["it", "en", "fr", "de", "es"] = Field(
+        default="en",
+        description="Lingua delle query Apollo (scelta manuale UI).",
+    )
 
 
 class AnalyzeCompanyIn(BaseModel):

@@ -181,6 +181,7 @@ async def company_search_endpoint(
                 payload.country,
                 payload.sector,
                 payload.limit,
+                payload.language,
             )
         else:
             out = await asyncio.to_thread(
@@ -189,6 +190,7 @@ async def company_search_endpoint(
                 payload.country,
                 payload.sector,
                 payload.limit,
+                payload.language,
             )
     except Exception as exc:
         logger.exception("company_search failed mode=%s: %s", mode, str(exc)[:300])

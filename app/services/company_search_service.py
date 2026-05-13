@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from app.core.config import settings
 from app.providers.apollo_provider import ApolloProvider
 from company_search_real import search_companies_real_with_meta
-from search_query_multilang import build_apollo_query_variants, detect_query_language
+from search_language_router import build_apollo_query_strings, normalize_search_language
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def _empty_meta() -> dict[str, Any]:
         "raw_results_count": 0,
         "valid_results_count": 0,
         "discarded_results_count": 0,
-        "detected_language": "",
+        "search_language": "",
         "apollo_queries_submitted": [],
         "apollo_raw_merged_count": 0,
         "apollo_status": "",
@@ -171,7 +171,15 @@ def _internal_rows(query: str, country: str, limit: int, *, mode: str) -> tuple[
         return [], _empty_meta()
 
 
-def shared_search_pipeline(query: str, country: str, sector: str = "", limit: int = 10, *, mode: str = "normal") -> dict[str, Any]:
+def shared_search_pipeline(
+    query: str,
+    country: str,
+    sector: str = "",
+    limit: int = 10,
+    *,
+    mode: str = "normal",
+    language: str = "en",
+) -> dict[str, Any]:
     meta = _empty_meta()
     requested_limit = max(1, min(int(limit or 10), 50))
     mode_norm = (mode or "normal").strip().lower()
@@ -181,9 +189,11 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
     apollo_key = (getattr(settings, "apollo_api_key", "") or "").strip()
     combined: list[dict[str, Any]] = []
 
+    lang_code = normalize_search_language(language)
+
     if not apollo_key:
         meta["apollo_status"] = "disabled"
-        meta["detected_language"] = detect_query_language(f"{query} {sector}")
+        meta["search_language"] = lang_code
         internal_rows, internal_meta = _internal_rows(query=query, country=country, limit=requested_limit, mode=mode_norm)
         combined.extend(internal_rows)
         meta["queries_used"] = internal_meta.get("queries_used", [])
@@ -191,8 +201,10 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
         meta["discarded_results_count"] = int(internal_meta.get("discarded_results_count", 0) or 0)
     else:
         provider = ApolloProvider(api_key=apollo_key, timeout_seconds=3)
-        detected_lang, q_variants = build_apollo_query_variants(query, country, sector or "")
-        meta["detected_language"] = detected_lang
+        lang_used, q_variants = build_apollo_query_strings(
+            lang_code, query, country, sector or "", mode=mode_norm
+        )
+        meta["search_language"] = lang_used
         meta["queries_used"] = list(q_variants)
         meta["apollo_queries_submitted"] = list(q_variants)
         raw_merged: list[dict[str, Any]] = []
@@ -285,8 +297,8 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
     meta["valid_results_count"] = len(cleaned)
 
     logger.info(
-        "[company-search] lang=%r queries=%r apollo_raw=%s valid=%s discarded_extra=%s apollo_status=%r",
-        meta.get("detected_language"),
+        "[company-search] search_language=%r queries=%r apollo_raw=%s valid=%s discarded_extra=%s apollo_status=%r",
+        meta.get("search_language"),
         meta.get("queries_used"),
         meta.get("apollo_raw_merged_count"),
         len(cleaned),
@@ -301,17 +313,30 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
     }
 
 
-def normal_search_service(query: str, country: str, sector: str = "", limit: int = 10) -> dict[str, Any]:
-    out = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit, mode="normal")
+def normal_search_service(
+    query: str, country: str, sector: str = "", limit: int = 10, language: str = "en"
+) -> dict[str, Any]:
+    out = shared_search_pipeline(
+        query=query, country=country, sector=sector, limit=limit, mode="normal", language=language
+    )
     out["results"] = out.get("results", [])[: min(int(limit or 10), 50)]
     out["mode"] = "normal"
     out["count"] = len(out["results"])
     return out
 
 
-def premium_search_service(query: str, country: str, sector: str = "", limit: int = 10) -> dict[str, Any]:
+def premium_search_service(
+    query: str, country: str, sector: str = "", limit: int = 10, language: str = "en"
+) -> dict[str, Any]:
     try:
-        base = shared_search_pipeline(query=query, country=country, sector=sector, limit=limit, mode="premium")
+        base = shared_search_pipeline(
+            query=query,
+            country=country,
+            sector=sector,
+            limit=limit,
+            mode="premium",
+            language=language,
+        )
         premium_rows = [r for r in base["results"] if r.get("score") in {"HIGH", "MEDIUM"}]
         premium_rows = premium_rows[: min(10, max(1, int(limit or 10)))]
         return {
@@ -323,7 +348,9 @@ def premium_search_service(query: str, country: str, sector: str = "", limit: in
         }
     except Exception as exc:
         logger.exception("premium_search_service failed, fallback to normal: %s", str(exc)[:240])
-        fallback = normal_search_service(query=query, country=country, sector=sector, limit=limit)
+        fallback = normal_search_service(
+            query=query, country=country, sector=sector, limit=limit, language=language
+        )
         fallback["mode"] = "premium"
         fallback["message"] = fallback.get("message") or EMPTY_MSG
         return fallback

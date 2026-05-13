@@ -31,6 +31,16 @@
           <form id="f">
             <input id="q" class="input" placeholder="Cerca aziende ad alto valore..." required />
             <div class="filters">
+              <label class="input" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;">
+                <span style="font-size:12px;color:#8fa3bf;">Lingua / Language</span>
+                <select id="searchLang" class="input" style="border:none;padding:0;background:transparent;">
+                  <option value="en" selected>English</option>
+                  <option value="it">Italiano</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="es">Español</option>
+                </select>
+              </label>
               <input id="country" class="input" placeholder="Paese" />
               <input id="sector" class="input" placeholder="Settore" />
               <input id="limit" class="input" type="number" min="1" max="50" value="10" />
@@ -95,6 +105,7 @@
           country: document.getElementById("country").value,
           sector: document.getElementById("sector").value,
           limit: Number(document.getElementById("limit").value || 10),
+          language: document.getElementById("searchLang").value,
         }),
       });
       const rows = data.results || [];
