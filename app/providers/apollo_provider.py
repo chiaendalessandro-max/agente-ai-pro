@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
 import requests
@@ -12,9 +11,9 @@ APOLLO_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_companies/search"
 
 
 class ApolloProvider:
-    def __init__(self, api_key: str, timeout_seconds: int = 5) -> None:
+    def __init__(self, api_key: str, timeout_seconds: int = 3) -> None:
         self.api_key = (api_key or "").strip()
-        self.timeout_seconds = max(1, int(timeout_seconds or 5))
+        self.timeout_seconds = max(1, int(timeout_seconds or 3))
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
@@ -25,6 +24,8 @@ class ApolloProvider:
         country: str,
         sector: str,
         limit: int,
+        *,
+        max_pages: int = 3,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if not self.is_configured():
             return [], {"apollo_status": "disabled", "raw_results_count": 0}
@@ -40,7 +41,8 @@ class ApolloProvider:
             "apollo_rate_limited": False,
         }
 
-        while len(rows) < target and page <= 3:
+        max_pages = max(1, min(int(max_pages or 1), 5))
+        while len(rows) < target and page <= max_pages:
             payload = {
                 "api_key": self.api_key,
                 "q_organization_name": query or "",
@@ -80,7 +82,6 @@ class ApolloProvider:
                 if not api_rows:
                     break
                 page += 1
-                time.sleep(0.05)
             except requests.Timeout:
                 logger.warning("Apollo timeout after %ss", self.timeout_seconds)
                 meta["apollo_status"] = "timeout"

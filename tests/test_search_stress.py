@@ -174,7 +174,7 @@ async def test_stress_no_results_returns_empty(monkeypatch: pytest.MonkeyPatch) 
             "mode": "normal",
             "count": 0,
             "results": [],
-            "message": "Nessuna azienda trovata con criteri attuali",
+            "message": "Nessun risultato disponibile",
             "meta": {
                 "queries_used": [],
                 "raw_results_count": 0,

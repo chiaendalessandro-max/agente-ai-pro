@@ -104,7 +104,7 @@ def test_premium_user_no_500_and_empty_result_contract(monkeypatch: pytest.Monke
             "mode": "premium",
             "count": 0,
             "results": [],
-            "message": "Nessuna azienda trovata con criteri attuali",
+            "message": "Nessun risultato disponibile",
             "meta": {
                 "queries_used": ["aviazione companies italy"],
                 "raw_results_count": 0,
@@ -134,7 +134,7 @@ def test_normal_search_empty_list_no_crash(monkeypatch: pytest.MonkeyPatch) -> N
             "mode": "normal",
             "count": 0,
             "results": [],
-            "message": "Nessuna azienda trovata con criteri attuali",
+            "message": "Nessun risultato disponibile",
             "meta": {
                 "queries_used": [],
                 "raw_results_count": 0,

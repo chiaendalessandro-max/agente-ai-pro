@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 from urllib.parse import urlparse
 
 from app.core.config import settings
 from app.providers.apollo_provider import ApolloProvider
 from company_search_real import search_companies_real_with_meta
+from search_query_multilang import build_apollo_query_variants, detect_query_language
 
 logger = logging.getLogger(__name__)
+
+EMPTY_MSG = "Nessun risultato disponibile"
 
 
 def _empty_meta() -> dict[str, Any]:
@@ -18,6 +22,10 @@ def _empty_meta() -> dict[str, Any]:
         "raw_results_count": 0,
         "valid_results_count": 0,
         "discarded_results_count": 0,
+        "detected_language": "",
+        "apollo_queries_submitted": [],
+        "apollo_raw_merged_count": 0,
+        "apollo_status": "",
     }
 
 
@@ -111,9 +119,52 @@ def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _apollo_org_key(row: dict[str, Any]) -> str:
+    rid = row.get("id")
+    if rid is not None and str(rid).strip():
+        return f"id:{str(rid).strip()}"
+    w = (row.get("website_url") or row.get("website") or "").strip()
+    if w:
+        return f"d:{_domain(w)}"
+    return ""
+
+
+def _merge_apollo_raw(acc: list[dict[str, Any]], new_rows: list[Any]) -> None:
+    seen: set[str] = set()
+    for r in acc:
+        k = _apollo_org_key(r)
+        if k:
+            seen.add(k)
+    for r in new_rows:
+        if not isinstance(r, dict):
+            continue
+        k = _apollo_org_key(r)
+        if k:
+            if k in seen:
+                continue
+            seen.add(k)
+        acc.append(r)
+
+
+def _rows_after_basic_filters(items: list[dict[str, Any]], country: str, requested_limit: int) -> list[dict[str, Any]]:
+    deduped = _dedupe_rows(items)[:requested_limit]
+    out: list[dict[str, Any]] = []
+    for item in deduped:
+        if not item.get("name"):
+            continue
+        if not (item.get("website") or item.get("source_url")):
+            continue
+        if country and (item.get("country") or "").upper() == "GLOBAL":
+            continue
+        out.append(item)
+    return out
+
+
 def _internal_rows(query: str, country: str, limit: int, *, mode: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     try:
-        rows, meta = search_companies_real_with_meta(query, country, limit, mode=mode)
+        rows, meta = search_companies_real_with_meta(
+            query, country, limit, mode=mode, minimal_internal=True
+        )
         return rows or [], meta or _empty_meta()
     except Exception as exc:
         logger.exception("internal search fallback failed: %s", str(exc)[:200])
@@ -126,38 +177,93 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
     mode_norm = (mode or "normal").strip().lower()
     if mode_norm not in {"normal", "premium"}:
         mode_norm = "normal"
-    apollo_key = getattr(settings, "apollo_api_key", "") or ""
+    early_valid = 5 if mode_norm == "premium" else 10
+    apollo_key = (getattr(settings, "apollo_api_key", "") or "").strip()
     combined: list[dict[str, Any]] = []
 
-    if apollo_key:
-        try:
-            provider = ApolloProvider(api_key=apollo_key, timeout_seconds=5)
-            apollo_rows_raw, apollo_meta = provider.search_organizations(query=query, country=country, sector=sector, limit=requested_limit)
-            meta.update({k: apollo_meta.get(k, meta.get(k)) for k in apollo_meta.keys() if k in meta or k.startswith("apollo_")})
-            normalized_apollo = []
-            for row in apollo_rows_raw:
-                norm = _normalize_apollo_row(row, query=query, country=country, sector=sector)
-                if norm:
-                    normalized_apollo.append(norm)
-            combined.extend(normalized_apollo)
-        except Exception as exc:
-            logger.warning("Apollo path failed, switching to internal fallback: %s", str(exc)[:200])
-
-    if len(combined) < requested_limit:
+    if not apollo_key:
+        meta["apollo_status"] = "disabled"
+        meta["detected_language"] = detect_query_language(f"{query} {sector}")
         internal_rows, internal_meta = _internal_rows(query=query, country=country, limit=requested_limit, mode=mode_norm)
         combined.extend(internal_rows)
         meta["queries_used"] = internal_meta.get("queries_used", [])
-        meta["raw_results_count"] = int(meta.get("raw_results_count", 0) or 0) + int(internal_meta.get("raw_results_count", 0) or 0)
+        meta["raw_results_count"] = int(internal_meta.get("raw_results_count", 0) or 0)
         meta["discarded_results_count"] = int(internal_meta.get("discarded_results_count", 0) or 0)
+    else:
+        provider = ApolloProvider(api_key=apollo_key, timeout_seconds=3)
+        detected_lang, q_variants = build_apollo_query_variants(query, country, sector or "")
+        meta["detected_language"] = detected_lang
+        meta["queries_used"] = list(q_variants)
+        meta["apollo_queries_submitted"] = list(q_variants)
+        raw_merged: list[dict[str, Any]] = []
+        last_worker_status = "ok"
+
+        try:
+            for i in range(0, len(q_variants), 5):
+                batch = q_variants[i : i + 5]
+                with ThreadPoolExecutor(max_workers=5) as ex:
+                    future_map = {
+                        ex.submit(
+                            provider.search_organizations,
+                            qv,
+                            country,
+                            sector or "",
+                            min(25, requested_limit),
+                            max_pages=1,
+                        ): qv
+                        for qv in batch
+                    }
+                    for fut in as_completed(list(future_map.keys())):
+                        qv = future_map[fut]
+                        try:
+                            rows, m = fut.result(timeout=0)
+                        except Exception as exc:
+                            logger.warning("Apollo worker failed q=%r: %s", qv[:80], str(exc)[:160])
+                            last_worker_status = "request_error"
+                            continue
+                        st = (m or {}).get("apollo_status") or "ok"
+                        if st != "ok":
+                            last_worker_status = st
+                        for mk, mv in (m or {}).items():
+                            if str(mk).startswith("apollo_"):
+                                meta[mk] = mv
+                        _merge_apollo_raw(raw_merged, rows)
+
+                normalized_partial: list[dict[str, Any]] = []
+                for row in raw_merged:
+                    n = _normalize_apollo_row(row, query=query, country=country, sector=sector or "")
+                    if n:
+                        normalized_partial.append(n)
+                if len(_rows_after_basic_filters(normalized_partial, country, requested_limit)) >= early_valid:
+                    break
+
+            meta["apollo_raw_merged_count"] = len(raw_merged)
+            meta["raw_results_count"] = len(raw_merged)
+            meta["apollo_status"] = "ok" if raw_merged else last_worker_status
+
+            for row in raw_merged:
+                n = _normalize_apollo_row(row, query=query, country=country, sector=sector or "")
+                if n:
+                    combined.append(n)
+        except Exception as exc:
+            logger.warning("Apollo orchestration failed: %s", str(exc)[:240])
+            meta["apollo_status"] = "orchestration_error"
+            meta["raw_results_count"] = 0
+            meta["apollo_raw_merged_count"] = 0
+            combined = []
 
     deduped = _dedupe_rows(combined)[:requested_limit]
-    cleaned = []
+    cleaned: list[dict[str, Any]] = []
+    discarded = 0
     for item in deduped:
         if not item.get("name"):
+            discarded += 1
             continue
         if not (item.get("website") or item.get("source_url")):
+            discarded += 1
             continue
         if country and (item.get("country") or "").upper() == "GLOBAL":
+            discarded += 1
             continue
         score_value = int(item.get("score") or 0)
         cleaned.append(
@@ -175,10 +281,22 @@ def shared_search_pipeline(query: str, country: str, sector: str = "", limit: in
             }
         )
 
+    meta["discarded_results_count"] = int(meta.get("discarded_results_count", 0) or 0) + discarded
     meta["valid_results_count"] = len(cleaned)
+
+    logger.info(
+        "[company-search] lang=%r queries=%r apollo_raw=%s valid=%s discarded_extra=%s apollo_status=%r",
+        meta.get("detected_language"),
+        meta.get("queries_used"),
+        meta.get("apollo_raw_merged_count"),
+        len(cleaned),
+        discarded,
+        meta.get("apollo_status"),
+    )
+
     return {
         "results": cleaned,
-        "message": "" if cleaned else "Nessuna azienda trovata con criteri attuali",
+        "message": "" if cleaned else EMPTY_MSG,
         "meta": meta,
     }
 
@@ -200,12 +318,12 @@ def premium_search_service(query: str, country: str, sector: str = "", limit: in
             "mode": "premium",
             "count": len(premium_rows),
             "results": premium_rows,
-            "message": "" if premium_rows else "Nessuna azienda trovata con criteri attuali",
+            "message": "" if premium_rows else EMPTY_MSG,
             "meta": base.get("meta", _empty_meta()),
         }
     except Exception as exc:
         logger.exception("premium_search_service failed, fallback to normal: %s", str(exc)[:240])
         fallback = normal_search_service(query=query, country=country, sector=sector, limit=limit)
         fallback["mode"] = "premium"
-        fallback["message"] = fallback.get("message") or "Fallback premium su ricerca normale"
+        fallback["message"] = fallback.get("message") or EMPTY_MSG
         return fallback

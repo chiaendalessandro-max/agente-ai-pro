@@ -381,12 +381,13 @@ def search_companies_real_with_meta(
     num_results: int = 10,
     *,
     mode: str = "normal",
+    minimal_internal: bool = False,
 ) -> tuple[list[dict], dict]:
     target = max(1, min(50, int(num_results or 10)))
     mode_norm = (mode or "normal").strip().lower()
     if mode_norm not in {"normal", "premium"}:
         mode_norm = "normal"
-    cache_key = f"{mode_norm}|{(query or '').strip().lower()}|{(country or '').strip().lower()}|{target}"
+    cache_key = f"{mode_norm}|mi:{int(bool(minimal_internal))}|{(query or '').strip().lower()}|{(country or '').strip().lower()}|{target}"
     now = time.time()
     cached = _SEARCH_CACHE.get(cache_key)
     if cached and (now - cached[0]) <= _SEARCH_CACHE_TTL_SECONDS:
@@ -405,13 +406,16 @@ def search_companies_real_with_meta(
     }
     try:
         try:
-            use_ai = is_ollama_available()
+            if minimal_internal:
+                use_ai = False
+            else:
+                use_ai = is_ollama_available()
         except Exception:
             use_ai = False
 
         try:
             queries = _phase_a_query_builder(query, country, expanded=False)
-            if use_ai:
+            if use_ai and not minimal_internal:
                 try:
                     queries.extend([q for q in ai_expand_search_queries(query, country) if isinstance(q, str)])
                 except Exception as exc:
@@ -453,7 +457,7 @@ def search_companies_real_with_meta(
         if need_more_fetch:
             try:
                 q2 = _phase_a_query_builder(query, country, expanded=True)
-                if use_ai:
+                if use_ai and not minimal_internal:
                     try:
                         q2.extend([q for q in ai_expand_search_queries(f"{query} companies", country) if isinstance(q, str)])
                     except Exception as exc:

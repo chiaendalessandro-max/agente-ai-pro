@@ -196,7 +196,7 @@ async def company_search_endpoint(
             "mode": mode,
             "count": 0,
             "results": [],
-            "message": "Nessuna azienda trovata con criteri attuali",
+            "message": "Nessun risultato disponibile",
             "meta": {
                 "queries_used": [],
                 "raw_results_count": 0,
