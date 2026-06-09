@@ -11,9 +11,9 @@ APOLLO_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_companies/search"
 
 
 class ApolloProvider:
-    def __init__(self, api_key: str, timeout_seconds: int = 3) -> None:
+    def __init__(self, api_key: str, timeout_seconds: int = 5) -> None:
         self.api_key = (api_key or "").strip()
-        self.timeout_seconds = max(1, int(timeout_seconds or 3))
+        self.timeout_seconds = max(1, int(timeout_seconds or 5))
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
@@ -25,7 +25,7 @@ class ApolloProvider:
         sector: str,
         limit: int,
         *,
-        max_pages: int = 3,
+        max_pages: int = 2,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if not self.is_configured():
             return [], {"apollo_status": "disabled", "raw_results_count": 0}
@@ -41,7 +41,7 @@ class ApolloProvider:
             "apollo_rate_limited": False,
         }
 
-        max_pages = max(1, min(int(max_pages or 1), 5))
+        max_pages = max(1, min(int(max_pages or 1), 2))
         while len(rows) < target and page <= max_pages:
             payload = {
                 "api_key": self.api_key,

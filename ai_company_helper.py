@@ -1,4 +1,3 @@
-import ollama
 import json
 import logging
 import requests as http_requests
@@ -6,6 +5,12 @@ import requests as http_requests
 logger = logging.getLogger(__name__)
 
 MODELLO = "llama3"
+
+
+def _ollama_chat(model: str, messages: list) -> dict:
+    import ollama
+
+    return ollama.chat(model=model, messages=messages)
 
 
 def is_ollama_available() -> bool:
@@ -53,10 +58,7 @@ Rispondi SOLO con array JSON di stringhe:
 ["query 1", "query 2", "query 3"]
 """
     try:
-        response = ollama.chat(
-            model=modello,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = _ollama_chat(modello, [{"role": "user", "content": prompt}])
         text = response["message"]["content"]
         start = text.find("[")
         end = text.rfind("]") + 1
@@ -88,10 +90,7 @@ Rispondi NO se:
 Rispondi solo: YES oppure NO
 """
     try:
-        response = ollama.chat(
-            model=modello,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = _ollama_chat(modello, [{"role": "user", "content": prompt}])
         answer = response["message"]["content"].strip().upper()
         valido = "YES" in answer
         logger.info(f"[AI] Validazione '{name}': {'OK' if valido else 'SCARTATA'}")
@@ -120,10 +119,7 @@ Restituisci SOLO questo JSON compilato, nient'altro:
 }}
 """
     try:
-        response = ollama.chat(
-            model=modello,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = _ollama_chat(modello, [{"role": "user", "content": prompt}])
         text = response["message"]["content"]
         start = text.find("{")
         end = text.rfind("}") + 1

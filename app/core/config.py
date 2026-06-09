@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     log_json: bool = False
     apollo_api_key: str = ""
+    search_provider: str = "apollo"
 
 
 settings = Settings()

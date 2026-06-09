@@ -50,7 +50,7 @@
                 <input id="premiumMode" type="checkbox" />
                 Ricerca Premium
               </label>
-              <button id="upgradeBtn" type="button" class="btn btn-secondary" style="margin-left:10px;display:none;">Sblocca Premium</button>
+              <button id="upgradeBtn" type="button" class="btn btn-secondary" style="margin-left:10px;display:none;">Passa a Premium</button>
             </div>
             <div style="margin-top:12px;">
               <button class="btn btn-primary" style="min-width:160px;">Cerca</button>
@@ -79,7 +79,7 @@
       }
       upgradeBtn.addEventListener("click", () => {
         const status = document.getElementById("status");
-        status.textContent = "Sblocca Premium per vedere tutti i risultati qualificati.";
+        status.textContent = "Passa a Premium per attivare la ricerca qualificata.";
       });
     } catch {
       PremiumUI.isPremiumUser = false;
@@ -110,20 +110,14 @@
       });
       const rows = data.results || [];
       if (!rows.length) {
-        status.textContent = "Abbiamo trovato 0 aziende";
-        results.innerHTML = `<div class="panel muted">Nessun risultato disponibile. Prova una ricerca diversa.</div>`;
+        status.textContent = data.message || "Abbiamo trovato 0 aziende";
+        results.innerHTML = `<div class="panel muted">${data.message || "Nessun risultato disponibile. Prova una ricerca diversa."}</div>`;
         return;
       }
 
-      const previewMode = !PremiumUI.isPremiumUser && !isPremium;
-      const visibleRows = previewMode ? rows.slice(0, 2) : rows;
-      const lockedCount = previewMode ? Math.max(0, rows.length - 2) : 0;
+      status.textContent = `Abbiamo trovato ${rows.length} aziende`;
 
-      status.textContent = previewMode
-        ? `Preview Premium: ${visibleRows.length} visibili, ${lockedCount} bloccati`
-        : `Abbiamo trovato ${rows.length} aziende`;
-
-      const visibleCards = visibleRows.map((r, idx) => `
+      const visibleCards = rows.map((r, idx) => `
         <article class="company-card">
           <div class="company-head">
             <div>
@@ -139,34 +133,12 @@
         </article>
       `).join("");
 
-      const lockedCards = previewMode
-        ? Array.from({ length: lockedCount }).map(() => `
-          <article class="company-card" style="opacity:.65;">
-            <div class="company-head">
-              <div>
-                <div class="company-name">Risultato Premium bloccato</div>
-                <div class="meta">Disponibile solo con abbonamento Premium</div>
-              </div>
-              <span class="badge low">LOCKED</span>
-            </div>
-            <div style="margin-top:14px;">
-              <button class="btn btn-secondary unlock-btn">Sblocca Premium</button>
-            </div>
-          </article>
-        `).join("")
-        : "";
-
-      results.innerHTML = visibleCards + lockedCards;
+      results.innerHTML = visibleCards;
 
       document.querySelectorAll(".save-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
           btn.textContent = "Lead salvato";
           btn.disabled = true;
-        });
-      });
-      document.querySelectorAll(".unlock-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          document.getElementById("upgradeBtn").click();
         });
       });
     } catch (err) {
