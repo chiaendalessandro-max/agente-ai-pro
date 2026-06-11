@@ -1,8 +1,13 @@
+.git/
 .venv/
 venv/
 __pycache__/
 *.py[cod]
+*.pyc
+.pytest_cache/
 *.sqlite3
+*.db
+*.log
 .env
 .DS_Store
 .idea/

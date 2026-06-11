@@ -1,3 +1,9 @@
+databases:
+  - name: agente-ai-pro-db
+    plan: free
+    databaseName: agente_ai_pro
+    user: agente_ai_pro
+
 services:
   - type: web
     name: agente-ai-pro
@@ -10,11 +16,16 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.6
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: agente-ai-pro-db
+          property: connectionString
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: JWT_REFRESH_SECRET_KEY
         generateValue: true
       - key: SMTP_ENABLED
         value: "false"
-
+      - key: SEARCH_PROVIDER
+        value: apollo
+      - key: APOLLO_API_KEY
+        sync: false

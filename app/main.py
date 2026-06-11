@@ -1,5 +1,3 @@
-import subprocess
-import sys
 import asyncio
 import logging
 import os
@@ -19,13 +17,8 @@ from app.core.database import engine
 from app.models import Base
 from app.services.scheduler_service import scheduler_loop
 
-# Avvia Ollama in background automaticamente
-subprocess.Popen(
-    [sys.executable, "start_with_ai.py"],
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL
-)
-
+# Nessun avvio automatico di Ollama: in produzione (Render) non deve partire.
+# Per usarlo in locale: eseguire manualmente `python start_with_ai.py`.
 
 setup_logging()
 logger = logging.getLogger(__name__)
