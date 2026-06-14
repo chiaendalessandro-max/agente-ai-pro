@@ -84,7 +84,7 @@ def test_normal_search_real_no_500(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         csr,
         "search_companies_real_with_meta",
-        lambda q, c, l, mode="normal", minimal_internal=False: (
+        lambda *a, **k: (
             [
                 {
                     "name": "Smoke Air",
@@ -129,3 +129,49 @@ def test_premium_search_free_user_blocked_403() -> None:
             json={"query": "aviazione", "country": "Italia", "limit": 10, "language": "it"},
         )
         assert r.status_code == 403
+
+
+def test_save_lead_from_search_result() -> None:
+    # FASE 7: il salvataggio lead deve creare davvero il lead (idempotente per dominio).
+    with TestClient(app) as client:
+        access = _register_and_login(client)
+        headers = {"Authorization": f"Bearer {access}"}
+        payload = {
+            "company_name": "Smoke Air",
+            "website": "https://smoke-air.it/",
+            "source_url": "https://smoke-air.it/",
+            "country": "Italy",
+            "sector": "aviazione",
+            "email": "info@smoke-air.it",
+            "phone": "+39 06 0000000",
+            "confidence_score": 72,
+            "query": "aviazione",
+        }
+        r = client.post("/api/v1/leads/save", headers=headers, json=payload)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body.get("ok") is True
+        assert isinstance(body.get("lead_id"), int)
+
+        # idempotenza: stessa azienda -> nessun nuovo lead, ma aggiornamento
+        r2 = client.post("/api/v1/leads/save", headers=headers, json=payload)
+        assert r2.status_code == 200, r2.text
+        assert r2.json().get("lead_id") == body.get("lead_id")
+
+        # presente nella lista lead dell'utente
+        listing = client.get("/leads", headers=headers)
+        assert listing.status_code == 200
+        names = [item.get("company_name") for item in listing.json()]
+        assert "Smoke Air" in names
+
+
+def test_save_lead_invalid_url_no_crash() -> None:
+    with TestClient(app) as client:
+        access = _register_and_login(client)
+        headers = {"Authorization": f"Bearer {access}"}
+        r = client.post(
+            "/api/v1/leads/save",
+            headers=headers,
+            json={"company_name": "No Site", "website": "", "source_url": ""},
+        )
+        assert r.status_code == 422

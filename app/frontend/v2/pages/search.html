@@ -144,10 +144,33 @@
 
       results.innerHTML = visibleCards;
 
+      const currentQuery = document.getElementById("q").value;
       document.querySelectorAll(".save-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          btn.textContent = "Lead salvato";
+        btn.addEventListener("click", async () => {
+          const r = rows[Number(btn.dataset.i)];
+          if (!r) return;
           btn.disabled = true;
+          btn.textContent = "Salvataggio...";
+          try {
+            await apiPremium("/api/v1/leads/save", {
+              method: "POST",
+              body: JSON.stringify({
+                company_name: r.company_name || "",
+                website: r.website || "",
+                source_url: r.source_url || "",
+                country: r.country || "",
+                sector: r.sector || "",
+                email: r.email || "",
+                phone: r.phone || "",
+                confidence_score: Number(r.confidence_score || 0),
+                query: currentQuery,
+              }),
+            });
+            btn.textContent = "Lead salvato";
+          } catch (err) {
+            btn.disabled = false;
+            btn.textContent = "Riprova salvataggio";
+          }
         });
       });
     } catch (err) {

@@ -323,9 +323,9 @@ def _classify_score(has_contacts: bool, snippet: str) -> tuple[int, str]:
     return score, "LOW"
 
 
-def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool) -> list[dict]:
+def _phase_f_enrich(rows: list[dict], query: str, country: str, use_ai: bool, max_contact_scans: int = 5) -> list[dict]:
     out = []
-    max_contact_scans = 5
+    max_contact_scans = max(0, int(max_contact_scans))
     max_ai_rows = 3
     homepage_fetch_budget = 0
     ai_calls = 0
@@ -382,12 +382,19 @@ def search_companies_real_with_meta(
     *,
     mode: str = "normal",
     minimal_internal: bool = False,
+    max_contact_scans: int | None = None,
+    early_stop_at: int | None = None,
 ) -> tuple[list[dict], dict]:
     target = max(1, min(50, int(num_results or 10)))
     mode_norm = (mode or "normal").strip().lower()
     if mode_norm not in {"normal", "premium"}:
         mode_norm = "normal"
-    cache_key = f"{mode_norm}|mi:{int(bool(minimal_internal))}|{(query or '').strip().lower()}|{(country or '').strip().lower()}|{target}"
+    eff_contact_scans = 5 if max_contact_scans is None else max(0, int(max_contact_scans))
+    eff_early_stop = (5 if mode_norm == "premium" else 10) if early_stop_at is None else max(1, int(early_stop_at))
+    cache_key = (
+        f"{mode_norm}|mi:{int(bool(minimal_internal))}|cs:{eff_contact_scans}|es:{eff_early_stop}"
+        f"|{(query or '').strip().lower()}|{(country or '').strip().lower()}|{target}"
+    )
     now = time.time()
     cached = _SEARCH_CACHE.get(cache_key)
     if cached and (now - cached[0]) <= _SEARCH_CACHE_TTL_SECONDS:
@@ -451,8 +458,7 @@ def search_companies_real_with_meta(
             logger.warning("[DEBUG] phase_validate_failed: %s", str(exc)[:120])
             valid, discarded = [], {"failed_validation_phase": len(deduped)}
 
-        early_stop_at = 5 if mode_norm == "premium" else 10
-        need_more_fetch = len(valid) < target and len(valid) < early_stop_at
+        need_more_fetch = len(valid) < target and len(valid) < eff_early_stop
 
         if need_more_fetch:
             try:
@@ -486,7 +492,7 @@ def search_companies_real_with_meta(
             valid = _phase_d_normalize_dedup(valid + valid2)
 
         try:
-            enriched = _phase_f_enrich(valid, query, country, use_ai=use_ai)
+            enriched = _phase_f_enrich(valid, query, country, use_ai=use_ai, max_contact_scans=eff_contact_scans)
         except Exception as exc:
             logger.warning("[DEBUG] phase_enrich_failed: %s", str(exc)[:120])
             enriched = valid

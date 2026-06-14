@@ -77,6 +77,36 @@ def test_normal_search_no_500(monkeypatch: pytest.MonkeyPatch) -> None:
     _contract_ok(payload)
 
 
+def test_deep_search_no_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    app.dependency_overrides[get_current_user] = _override_user("free")
+    app.dependency_overrides[apply_rate_limit] = _no_rate_limit
+
+    def _fake_deep(query: str, country: str, sector: str, limit: int, language: str = "en") -> dict:
+        return {
+            "mode": "deep",
+            "count": 1,
+            "results": [{"company_name": "Deep Co", "confidence_score": 65}],
+            "message": "",
+            "meta": {
+                "queries_used": ["deep query"],
+                "raw_results_count": 30,
+                "valid_results_count": 1,
+                "discarded_results_count": 29,
+                "depth": "deep",
+            },
+        }
+
+    monkeypatch.setattr(leads_routes, "deep_search_service", _fake_deep)
+    with TestClient(app) as client:
+        resp = client.post("/api/v1/company-search?mode=deep", json={"query": "aviazione", "country": "Italia", "limit": 50})
+    _clear_overrides()
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    _contract_ok(payload)
+    assert payload["meta"]["depth"] == "deep"
+
+
 def test_premium_free_returns_403_and_does_not_execute(monkeypatch: pytest.MonkeyPatch) -> None:
     app.dependency_overrides[get_current_user] = _override_user("free")
     app.dependency_overrides[apply_rate_limit] = _no_rate_limit

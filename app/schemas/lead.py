@@ -44,6 +44,20 @@ class ScoreLeadIn(BaseModel):
     has_phone: bool = False
 
 
+class SaveLeadIn(BaseModel):
+    """Payload per salvare un lead da un risultato di ricerca (FASE 7)."""
+
+    company_name: str = Field(default="", max_length=255)
+    website: str = Field(default="", max_length=500)
+    source_url: str = Field(default="", max_length=500)
+    country: str = Field(default="", max_length=80)
+    sector: str = Field(default="", max_length=120)
+    email: str = Field(default="", max_length=255)
+    phone: str = Field(default="", max_length=80)
+    confidence_score: int = Field(default=0, ge=0, le=100)
+    query: str = Field(default="", max_length=300)
+
+
 class LeadTemperatureIn(BaseModel):
     temperature: str = Field(min_length=3, max_length=4)
 

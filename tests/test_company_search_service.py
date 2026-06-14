@@ -55,7 +55,7 @@ def _patch_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         csr,
         "search_companies_real_with_meta",
-        lambda q, c, l, mode="normal", minimal_internal=False: _engine_rows(),
+        lambda *a, **k: _engine_rows(),
     )
 
 
@@ -68,6 +68,20 @@ def test_normal_returns_new_result_model() -> None:
     assert row["revenue"] == "not found"
     assert row["validation_status"] == "verified"
     assert isinstance(row["confidence_score"], int)
+
+
+def test_fast_service_caps_at_10_and_no_ai_mode() -> None:
+    out = svc.fast_search_service("aviazione", "Italia", "", 10, language="it")
+    assert out["mode"] == "fast"
+    assert out["meta"]["depth"] == "fast"
+    assert out["count"] <= 10
+
+
+def test_deep_service_depth_meta_and_cap() -> None:
+    out = svc.deep_search_service("aviazione", "Italia", "", 50, language="it")
+    assert out["mode"] == "deep"
+    assert out["meta"]["depth"] == "deep"
+    assert out["count"] <= 50
 
 
 def test_meta_contract_keys_present() -> None:
@@ -94,7 +108,7 @@ def test_empty_engine_returns_controlled_message(monkeypatch: pytest.MonkeyPatch
     out = svc.normal_search_service("xyznotexist", "Italia", "", 10)
     assert out["count"] == 0
     assert out["results"] == []
-    assert out["message"] == "Nessun risultato disponibile"
+    assert out["message"] == "Nessuna azienda trovata con questi criteri"
 
 
 def test_engine_exception_no_crash(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,4 +119,4 @@ def test_engine_exception_no_crash(monkeypatch: pytest.MonkeyPatch) -> None:
     out = svc.normal_search_service("aviazione", "Italia", "", 10)
     assert out["count"] == 0
     assert out["results"] == []
-    assert out["message"] == "Nessun risultato disponibile"
+    assert out["message"] == "Nessuna azienda trovata con questi criteri"

@@ -17,11 +17,16 @@ from app.schemas.lead import (
     CompanySearchIn,
     LeadItemOut,
     LeadTemperatureIn,
+    SaveLeadIn,
     ScoreLeadIn,
     SearchGlobalIn,
 )
 from app.services.analyzer_service import safe_analyze_company
-from app.services.company_search_service import normal_search_service, premium_search_service
+from app.services.company_search_service import (
+    deep_search_service,
+    normal_search_service,
+    premium_search_service,
+)
 from app.services.scoring_service import score_lead
 from company_search_real import search_companies_real
 
@@ -46,6 +51,23 @@ def _temperature_from_lead(lead: Lead) -> str:
     if lead.score >= 40:
         return "WARM"
     return "COLD"
+
+
+def _domain_from_url(url: str) -> str:
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = "https://" + raw
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(raw).hostname or "").lower()
+    except Exception:
+        return ""
+    if host.startswith("www."):
+        host = host[4:]
+    return host if "." in host else ""
 
 
 def _score_band(score_value: int) -> str:
@@ -166,39 +188,37 @@ async def search_global_endpoint(
 @router.post("/api/v1/company-search")
 async def company_search_endpoint(
     payload: CompanySearchIn,
-    mode: str = Query(default="normal", pattern="^(normal|premium)$"),
+    mode: str = Query(default="normal", pattern="^(normal|fast|deep|premium)$"),
     user: User = Depends(get_current_user),
 ) -> dict:
     user_plan = (getattr(user, "plan", "") or "free").lower()
     if mode == "premium" and user_plan != "premium":
         raise HTTPException(status_code=403, detail="Funzione disponibile solo per utenti Premium")
 
+    if mode == "premium":
+        service = premium_search_service
+    elif mode == "deep":
+        service = deep_search_service
+    else:
+        # normal/fast: la ricerca normale è la fast (indipendente dalla premium)
+        service = normal_search_service
+
     try:
-        if mode == "premium":
-            out = await asyncio.to_thread(
-                premium_search_service,
-                payload.query,
-                payload.country,
-                payload.sector,
-                payload.limit,
-                payload.language,
-            )
-        else:
-            out = await asyncio.to_thread(
-                normal_search_service,
-                payload.query,
-                payload.country,
-                payload.sector,
-                payload.limit,
-                payload.language,
-            )
+        out = await asyncio.to_thread(
+            service,
+            payload.query,
+            payload.country,
+            payload.sector,
+            payload.limit,
+            payload.language,
+        )
     except Exception as exc:
         logger.exception("company_search failed mode=%s: %s", mode, str(exc)[:300])
         out = {
             "mode": mode,
             "count": 0,
             "results": [],
-            "message": "Nessun risultato disponibile",
+            "message": "Nessuna azienda trovata con questi criteri",
             "meta": {
                 "queries_used": [],
                 "raw_results_count": 0,
@@ -207,6 +227,71 @@ async def company_search_endpoint(
             },
         }
     return out
+
+
+@router.post("/api/v1/leads/save")
+async def save_lead_endpoint(
+    payload: SaveLeadIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Salva realmente un lead da un risultato di ricerca (FASE 7).
+
+    Idempotente per (utente, dominio): se il lead esiste già lo aggiorna.
+    Non solleva mai 500 per input incompleti: valida e risponde in modo controllato.
+    """
+    domain = _domain_from_url(payload.website or payload.source_url)
+    if not domain:
+        raise HTTPException(status_code=422, detail="Sito o URL non valido per il salvataggio.")
+
+    website = (payload.website or payload.source_url or f"https://{domain}/").strip()
+    try:
+        existing_company_q = await db.execute(select(Company).where(Company.domain == domain))
+        company = existing_company_q.scalar_one_or_none()
+        if not company:
+            company = Company(
+                domain=domain,
+                name=(payload.company_name or domain).strip()[:255],
+                website=website[:500],
+                country=(payload.country or "").strip()[:80],
+                sector=(payload.sector or "").strip()[:120],
+            )
+            db.add(company)
+            await db.flush()
+
+        lead_q = await db.execute(
+            select(Lead).where(Lead.user_id == user.id, Lead.company_id == company.id)
+        )
+        lead = lead_q.scalar_one_or_none()
+        created = False
+        score_val = max(0, min(100, int(payload.confidence_score or 0)))
+        if not lead:
+            lead = Lead(
+                user_id=user.id,
+                company_id=company.id,
+                source_query=(payload.query or "")[:255],
+                contact_email=(payload.email or "")[:255],
+                contact_phone=(payload.phone or "")[:80],
+                score=score_val,
+                classification=_score_band(score_val),
+            )
+            db.add(lead)
+            created = True
+        else:
+            lead.contact_email = (payload.email or lead.contact_email)[:255]
+            lead.contact_phone = (payload.phone or lead.contact_phone)[:80]
+            lead.score = score_val
+            lead.classification = _score_band(score_val)
+        await db.commit()
+        await db.refresh(lead)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("save_lead failed: %s", str(exc)[:300])
+        raise HTTPException(status_code=422, detail="Impossibile salvare il lead.") from exc
+
+    return {"ok": True, "lead_id": lead.id, "created": created, "company_id": company.id}
 
 
 @router.post("/analyze-company")
