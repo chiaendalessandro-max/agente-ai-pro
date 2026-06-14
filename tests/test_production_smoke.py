@@ -1,7 +1,7 @@
 """Smoke di produzione end-to-end (senza mock): valida il wiring reale dei punti obbligatori.
 
 Aree coperte: health check, readiness DB, registrazione, login, /me, dashboard,
-ricerca normale (no 500 anche senza Apollo configurato) e gate premium per utenti free.
+ricerca normale (no 500, motore interno) e gate premium per utenti free.
 """
 from __future__ import annotations
 
@@ -77,7 +77,30 @@ def test_dashboard_page_served() -> None:
         assert "text/html" in (r.headers.get("content-type") or "")
 
 
-def test_normal_search_real_no_500() -> None:
+def test_normal_search_real_no_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Motore di ricerca isolato dalla rete: testiamo il wiring (auth -> endpoint -> servizio -> modello).
+    import company_search_real as csr
+
+    monkeypatch.setattr(
+        csr,
+        "search_companies_real_with_meta",
+        lambda q, c, l, mode="normal", minimal_internal=False: (
+            [
+                {
+                    "name": "Smoke Air",
+                    "website": "https://smoke-air.it/",
+                    "source_url": "https://smoke-air.it/",
+                    "country": "Italy",
+                    "sector": "aviazione",
+                    "contact_email": "info@smoke-air.it",
+                    "contact_phone": "+39 06 0000000",
+                    "score": 72,
+                    "classification": "HIGH VALUE",
+                }
+            ],
+            {"queries_used": ["q"], "raw_results_count": 1, "discarded_results_count": 0},
+        ),
+    )
     with TestClient(app) as client:
         access = _register_and_login(client)
         r = client.post(
@@ -90,6 +113,11 @@ def test_normal_search_real_no_500() -> None:
         assert isinstance(body.get("results"), list)
         assert "message" in body
         assert "meta" in body
+        if body["results"]:
+            row = body["results"][0]
+            for key in ("company_name", "website", "country", "sector", "email", "phone", "revenue", "source_url", "confidence_score", "validation_status"):
+                assert key in row
+            assert row["revenue"] == "not found"
 
 
 def test_premium_search_free_user_blocked_403() -> None:

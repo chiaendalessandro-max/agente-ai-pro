@@ -31,8 +31,6 @@ class Settings(BaseSettings):
     analyze_concurrency: int = 5
 
     log_json: bool = False
-    apollo_api_key: str = ""
-    search_provider: str = "apollo"
 
 
 settings = Settings()

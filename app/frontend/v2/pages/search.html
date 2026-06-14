@@ -117,21 +117,30 @@
 
       status.textContent = `Abbiamo trovato ${rows.length} aziende`;
 
-      const visibleCards = rows.map((r, idx) => `
+      const confBand = (c) => (c >= 70 ? "HIGH VALUE" : c >= 40 ? "MEDIUM" : "LOW");
+
+      const visibleCards = rows.map((r, idx) => {
+        const conf = Number(r.confidence_score || 0);
+        const band = confBand(conf);
+        const contacts = [r.email, r.phone].filter(Boolean).join(" · ") || "Contatti non pubblici";
+        const site = r.website || r.source_url || "";
+        return `
         <article class="company-card">
           <div class="company-head">
             <div>
               <div class="company-name">${r.company_name || "Azienda"}</div>
-              <div class="meta">${r.country || "-"} · Score ${r.score || "LOW"} · Probabilità ${r.client_probability || "LOW"}</div>
+              <div class="meta">${r.country || "-"} · ${r.sector || "settore n/d"} · Confidence ${conf}</div>
             </div>
-            <span class="badge ${classBadge(r.score || r.classification)}">${r.score || "LOW"}</span>
+            <span class="badge ${classBadge(band)}">${band}</span>
           </div>
-          <div class="meta" style="margin-top:8px;">${r.why_this_company || ""}</div>
+          <div class="meta" style="margin-top:8px;">${contacts}</div>
+          <div class="meta" style="margin-top:4px;">Revenue: ${r.revenue || "not found"} · Stato: ${r.validation_status || "verified"}</div>
+          ${site ? `<div class="meta" style="margin-top:4px;"><a href="${site}" target="_blank" rel="noopener">${site}</a></div>` : ""}
           <div style="margin-top:14px;">
             <button class="btn btn-secondary save-btn" data-i="${idx}">Salva lead</button>
           </div>
-        </article>
-      `).join("");
+        </article>`;
+      }).join("");
 
       results.innerHTML = visibleCards;
 

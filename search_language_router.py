@@ -45,7 +45,7 @@ def _pick_main_keyword(bank: dict[str, list[str]], sector: str, *, premium: bool
     return ""
 
 
-def build_apollo_search_params(
+def build_search_params(
     language: str,
     user_query: str,
     country: str,
@@ -54,7 +54,8 @@ def build_apollo_search_params(
     mode: str = "normal",
 ) -> tuple[str, str, str]:
     """
-    Una sola chiamata Apollo: query organizzazione pulita + keyword principale.
+    Costruisce i parametri di ricerca dal file lingua selezionato:
+    query organizzazione pulita + keyword principale.
     Ritorna (lang_code, organization_query, main_keyword).
     """
     code = normalize_search_language(language)

@@ -18,7 +18,7 @@ class CompanySearchIn(BaseModel):
     limit: int = Field(default=10, ge=1, le=50)
     language: Literal["it", "en", "fr", "de", "es"] = Field(
         default="en",
-        description="Lingua delle query Apollo (scelta manuale UI).",
+        description="Lingua delle query di ricerca (scelta manuale UI).",
     )
 
 

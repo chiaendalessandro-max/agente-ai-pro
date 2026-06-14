@@ -1,8 +1,8 @@
-"""Normalizzazione nomi paese per Apollo (inglese)."""
+"""Normalizzazione nomi paese (verso forma inglese) per la ricerca."""
 
 from __future__ import annotations
 
-_COUNTRY_TO_APOLLO: dict[str, str] = {
+_COUNTRY_CANON: dict[str, str] = {
     "italia": "Italy",
     "italy": "Italy",
     "germania": "Germany",
@@ -26,9 +26,9 @@ _COUNTRY_TO_APOLLO: dict[str, str] = {
 }
 
 
-def normalize_country_for_apollo(country: str) -> str:
+def normalize_country(country: str) -> str:
     raw = (country or "").strip()
     if not raw:
         return ""
     key = raw.lower()
-    return _COUNTRY_TO_APOLLO.get(key, raw)
+    return _COUNTRY_CANON.get(key, raw)

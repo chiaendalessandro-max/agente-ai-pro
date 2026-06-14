@@ -1,6 +1,5 @@
-# Dipendenze solo per SEARCH_PROVIDER=internal o hybrid (sviluppo locale).
+# Layer 6 AI Analysis (opzionale, solo sviluppo locale). Non richiesto in produzione.
 -r requirements.txt
-duckduckgo-search==6.2.13
 ollama>=0.1.0
 spacy>=3.7.0
 sentence-transformers>=3.0.0
