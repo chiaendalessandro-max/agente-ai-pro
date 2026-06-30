@@ -132,3 +132,21 @@ body {
   .filters { grid-template-columns: 1fr; }
   .lead-row { grid-template-columns: 1fr; }
 }
+
+/* Smartphone: layout impilato, padding ridotti, hero piu' compatta. */
+@media (max-width: 600px) {
+  .wrap { padding: 0 14px; }
+  .row { flex-wrap: wrap; }
+  .nav { gap: 8px; padding: 10px 0 12px; }
+  .nav a { font-size: 13px; padding: 7px 11px; }
+  .hero { margin-top: 18px; border-radius: 16px; }
+  .hero img { height: 200px; }
+  .hero-content { padding: 22px; }
+  .hero h1 { font-size: 25px; }
+  .hero p { font-size: 14px; }
+  .search-box { padding: 14px; border-radius: 16px; }
+  .filters { grid-template-columns: 1fr; }
+  .input { font-size: 16px; padding: 12px 14px; }
+  .company-head { flex-direction: column; }
+  .kpi-value { font-size: 28px; }
+}

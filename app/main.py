@@ -24,10 +24,12 @@ setup_logging()
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Agente AI Pro", version="1.0.0")
 
+# L'auth usa header Authorization: Bearer (non cookie), quindi non servono credentials.
+# allow_origins="*" + allow_credentials=True e' una combinazione non valida lato browser.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

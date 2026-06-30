@@ -17,3 +17,15 @@ __pycache__/
 da_installare.txt
 ollama_model.txt
 pytest_agent.db
+
+# Script di sviluppo locali (non necessari al deploy)
+install_ollama.py
+install_missing.py
+check_installed.py
+start_with_ai.py
+setup_ollama_auto.py
+setup_ollama_model.py
+setup_spacy.py
+test_ai_analysis.py
+test_finale.py
+requirements-internal.txt

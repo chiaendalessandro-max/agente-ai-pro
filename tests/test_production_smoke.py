@@ -77,6 +77,17 @@ def test_dashboard_page_served() -> None:
         assert "text/html" in (r.headers.get("content-type") or "")
 
 
+def test_mobile_viewport_present_on_served_pages() -> None:
+    # Mobile/responsive base: ogni pagina servita deve avere il meta viewport.
+    with TestClient(app) as client:
+        for path in ("/", "/app/search", "/app/dashboard", "/app/leads"):
+            r = client.get(path)
+            assert r.status_code == 200, path
+            html = r.text.lower()
+            assert 'name="viewport"' in html, path
+            assert "width=device-width" in html, path
+
+
 def test_normal_search_real_no_500(monkeypatch: pytest.MonkeyPatch) -> None:
     # Motore di ricerca isolato dalla rete: testiamo il wiring (auth -> endpoint -> servizio -> modello).
     import company_search_real as csr
